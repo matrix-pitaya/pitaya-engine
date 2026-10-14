@@ -135,9 +135,9 @@ namespace Pitaya::Asset
                         return;
                     }
 
-                    _entry->State.SetBits(Pitaya::Core::AssetState::Unload);
+                    _entry->RequestUnload();
                     level = Pitaya::Log::LogLevel::Info;
-                    log = "asset entry set unloads";
+                    log = "asset unload requested GUID:" + _guid.ToString();
                     success = true;
                 },
                 [&success, &log, &level](Pitaya::Core::GUID _guid)
@@ -182,13 +182,18 @@ namespace Pitaya::Asset
                         return;
                     }
 
-                    log = "asset entry existence, return exist asset entry GUID:" + _guid.ToString();
+                    log = "asset entry reused GUID:" + _guid.ToString();
                     level = Pitaya::Log::LogLevel::Info;
                     asset = _entry;
 
-                    if (_entry->State == Pitaya::Core::AssetState::Unload)
+                    if (_entry->IsUnloadRequested() && _entry->HasLoadedData())
                     {
-                        //TODO 处理特殊情况 资产标记为unload后重新调用此函数加载 需要判断是否为Unload，如果是根据CPU、GPU状态进行不同处理
+                        _entry->State.ClearBits(Pitaya::Core::AssetState::Unload);
+                    }
+                    else if (_entry->IsUnloadRequested() || _entry->IsFailed())
+                    {
+                        _entry->PrepareReload();
+                        asyncLoad = true;
                     }
                 },
                 [&asset, &asyncLoad, &log, &level](Pitaya::Core::GUID _guid) -> std::optional<std::pair<Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry*>>
@@ -200,6 +205,7 @@ namespace Pitaya::Asset
                     typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = Pitaya::Core::New<typename Pitaya::Core::AssetRef<T>::AssetEntry>();
                     entry->GUID = _guid;
                     entry->Data.store(Pitaya::Core::New<T>(), std::memory_order_release);
+                    entry->BeginCpuLoad();
                     asset = entry;
                     return std::make_pair(_guid, entry);
                 });
@@ -222,6 +228,16 @@ namespace Pitaya::Asset
                     else if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { LoadRenderTarget(guid, path); }
                     else if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { LoadSkyBoxAsset(guid, path); }
                     else { Pitaya::Log::Error("async load asset fail,GUID:" + guid.ToString() + " path:" + path.string()); }
+
+                    typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = nullptr;
+                    GetAssetEntryMap<T>().FindOperateKV(guid,
+                        [&entry](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* value) { entry = value; },
+                        [](Pitaya::Core::GUID) {});
+                    if (entry && entry->State.HasBits(Pitaya::Core::AssetState::CPULoading))
+                    {
+                        entry->FailCpuLoad();
+                        Pitaya::Log::Error("asset CPU load did not complete GUID:" + guid.ToString());
+                    }
                 }, "Async Load Asset path: " + path.string() + " GUID: " + guid.ToString());
         }
 
@@ -377,7 +393,7 @@ namespace Pitaya::Asset
             // 在时间预算内处理资产
             Pitaya::Core::InvokeWithTimeBudget(
                 [this]() ->bool { return cacheAssetOperateQueue.empty(); },
-                [this]() { std::visit([this](const auto& result_Inner) { this->SyncAssetOperate(result_Inner); }, cacheAssetOperateQueue.front().Data); cacheAssetOperateQueue.pop(); },
+                [this]() { std::visit([this](auto& result_Inner) { this->SyncAssetOperate(result_Inner); }, cacheAssetOperateQueue.front().Data); cacheAssetOperateQueue.pop(); },
                 std::chrono::milliseconds(2));
         }
         inline bool IsUploadedToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer>)
@@ -386,15 +402,15 @@ namespace Pitaya::Asset
         }
 
     private:
-        void SyncAssetOperate(const std::monostate&);
-        void SyncAssetOperate(const Pitaya::Import::Texture2DImportResult&);
-        void SyncAssetOperate(const Pitaya::Import::TextureCubemapImportResult&);
-        void SyncAssetOperate(const Pitaya::Import::ShaderImportResult&);
-        void SyncAssetOperate(const Pitaya::Import::StaticMeshImportResult&);
-        void SyncAssetOperate(const Pitaya::Import::SkinnedMeshImportResult&);
-        void SyncAssetOperate(const Pitaya::Import::RenderTargetImportResult&);
-        void SyncAssetOperate(const Pitaya::Asset::Texture2DUnloadRequire&);
-        void SyncAssetOperate(const Pitaya::Import::SkyBoxImportResult&);
+        void SyncAssetOperate(std::monostate&);
+        void SyncAssetOperate(Pitaya::Import::Texture2DImportResult&);
+        void SyncAssetOperate(Pitaya::Import::TextureCubemapImportResult&);
+        void SyncAssetOperate(Pitaya::Import::ShaderImportResult&);
+        void SyncAssetOperate(Pitaya::Import::StaticMeshImportResult&);
+        void SyncAssetOperate(Pitaya::Import::SkinnedMeshImportResult&);
+        void SyncAssetOperate(Pitaya::Import::RenderTargetImportResult&);
+        void SyncAssetOperate(Pitaya::Asset::Texture2DUnloadRequire&);
+        void SyncAssetOperate(Pitaya::Import::SkyBoxImportResult&);
 
     private:
         inline static constexpr const char* fileName = "asset.cfg";

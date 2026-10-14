@@ -107,7 +107,7 @@ bool Pitaya::Serialize::Serializable::DeserializeFromString(const std::string& d
     {
          context->LoadString(data);
          Deserialize(*context);
-         return false;
+         return true;
     }
     catch (const std::exception& e)
     {
