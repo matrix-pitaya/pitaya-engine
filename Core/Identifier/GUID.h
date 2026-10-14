@@ -3,6 +3,8 @@
 #include<string>
 #include<cstdint>
 #include<stdexcept>
+#include<format>
+#include<algorithm>
 
 #if defined(PITAYA_PLATFORM_WINDOWS)
 #define NOMINMAX
@@ -84,19 +86,25 @@ namespace Pitaya::Core
 		{
 			return value[index == 0 ? 0 : 1];
 		}
-		inline std::string ToString() const noexcept
+
+		template<size_t N>
+		inline void ToString(char(&buffer)[N]) const noexcept
 		{
-			uint64_t value[2] = {};
-			value[0] = this->value[0];
-			value[1] = this->value[1];
-
-			char buf[37] = {};
-			const std::byte* p = reinterpret_cast<const std::byte*>(value);
-
-			std::snprintf(buf, sizeof(buf),
+			static_assert(N >= 37, "GUID::ToString buffer must be at least 37 bytes");
+			ToString(buffer, N);
+		}
+		inline void ToString(char* buffer, size_t bufferSize) const noexcept
+		{
+			uint64_t rawValue[2] = { this->value[0], this->value[1] };
+			const std::byte* p = reinterpret_cast<const std::byte*>(rawValue);
+			std::snprintf(buffer, bufferSize,
 				"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 				p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
-
+		}
+		inline std::string ToString() const noexcept
+		{
+			char buf[37] = {};
+			ToString(buf, sizeof(buf));
 			return buf;
 		}
 
@@ -121,7 +129,7 @@ namespace Pitaya::Core
 
 namespace std 
 {
-	template<> 
+	template<>
 	struct hash<Pitaya::Core::GUID>
 	{
 		size_t operator()(const Pitaya::Core::GUID& guid) const noexcept
@@ -129,6 +137,19 @@ namespace std
 			auto h1 = std::hash<uint64_t>{}(guid[1]);
 			auto h2 = std::hash<uint64_t>{}(guid[0]);
 			return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+		}
+	};
+	template<>
+	struct formatter<Pitaya::Core::GUID>
+	{
+		constexpr auto parse(std::format_parse_context& ctx)
+		{
+			return ctx.begin();
+		}
+		auto format(const Pitaya::Core::GUID& guid, std::format_context& ctx) const
+		{
+			const std::string text = guid.ToString();
+			return std::copy(text.begin(), text.end(), ctx.out());
 		}
 	};
 }

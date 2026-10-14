@@ -13,6 +13,8 @@
 #include<Core/Utils/System.h>
 #include<Application/Built-in.h>
 
+#include<unordered_set>
+
 namespace
 {
     const std::unordered_set<std::string> TextureExtensions =

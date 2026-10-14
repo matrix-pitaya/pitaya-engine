@@ -344,7 +344,6 @@ namespace Pitaya::Asset
         }
 
     private:
-        template<AssetType T>
         inline bool IsEngineAssetPath(const std::filesystem::path& virtualPath)
         {
             return virtualPath.string().starts_with("engine:/");
