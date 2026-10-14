@@ -148,8 +148,9 @@ namespace std
 		}
 		auto format(const Pitaya::Core::GUID& guid, std::format_context& ctx) const
 		{
-			const std::string text = guid.ToString();
-			return std::copy(text.begin(), text.end(), ctx.out());
+			char text[37] = {};
+			guid.ToString(text, sizeof(text));
+			return std::copy(text, text + 36, ctx.out());
 		}
 	};
 }
