@@ -21,6 +21,7 @@
 #include<Asset/Common/Shader.h>
 #include<Asset/Common/Texture.h>
 #include<Asset/Common/AssetType.h>
+#include<Asset/Common/AssetCatalog.h>
 #include<Asset/Common/SkyBox.h>
 
 #include<chrono>
@@ -65,7 +66,7 @@ namespace Pitaya::Asset
 
             Pitaya::Core::ThreadSafeBidirectionalMap<Pitaya::Core::GUID, std::filesystem::path> Map;
         };
-        struct BuildInAsset
+        struct BuiltinAssetStorage
         {
             Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry White;
             Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry Black;
@@ -97,11 +98,16 @@ namespace Pitaya::Asset
         template<AssetType T>
         inline Pitaya::Core::AssetRef<T> LoadAsset(Pitaya::Core::GUID guid)
         {
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { if (guid == Pitaya::Asset::Shader::PBRStatic) { return Pitaya::Core::AssetRef<Pitaya::Asset::Shader>(&buildIn.PBRStaticShader); } else if (guid == Pitaya::Asset::Shader::PBRSkinned) { return Pitaya::Core::AssetRef<Pitaya::Asset::Shader>(&buildIn.PBRSkinnedShader); } }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { if (guid == Pitaya::Asset::Material::PBR) { return Pitaya::Core::AssetRef<Pitaya::Asset::Material>(&buildIn.PBRMaterial); } }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { if (guid == Pitaya::Asset::Texture::White) { return Pitaya::Core::AssetRef<Pitaya::Asset::Texture>(&buildIn.White); } else if (guid == Pitaya::Asset::Texture::Black) { return Pitaya::Core::AssetRef<Pitaya::Asset::Texture>(&buildIn.Black); } else if (guid == Pitaya::Asset::Texture::FlatNormal) { return Pitaya::Core::AssetRef<Pitaya::Asset::Texture>(&buildIn.FlatNormal); } }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { if (guid == Pitaya::Asset::Mesh::Sphere) { return Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>(&buildIn.Sphere); } else if (guid == Pitaya::Asset::Mesh::Cube) { return Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>(&buildIn.Cube); } else if (guid == Pitaya::Asset::Mesh::Panel) { return Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>(&buildIn.Panel); } }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { if (guid == Pitaya::Asset::SkyBox::Default) { return Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>(&buildIn.DefaultSkyBox); } }
+            Pitaya::Asset::BuiltinAssetInfo builtinInfo;
+            if (builtinCatalog.Find(guid, builtinInfo))
+            {
+                if (builtinInfo.Type != Pitaya::Asset::AssetTraits<T>::Type)
+                {
+                    Pitaya::Log::Error("asset type mismatch for builtin GUID:" + guid.ToString());
+                    return nullptr;
+                }
+                return FindAssetEntry<T>(guid);
+            }
 
             std::filesystem::path path;
             if (!GetAssetPathByGUID(guid, path))
@@ -114,9 +120,9 @@ namespace Pitaya::Asset
         template<AssetType T>
         inline bool UnloadAsset(Pitaya::Core::GUID guid)
         {
-            if (IsBuildInAsset<T>(guid))
+            if (builtinCatalog.Matches<T>(guid))
             {
-                Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning, "Can't Unload Buildin Asset!");
+                Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning, "Can't unload builtin asset!");
                 return false;
             }
 
@@ -149,6 +155,26 @@ namespace Pitaya::Asset
             Pitaya::Log::Write(level, log);
             return success;
         }
+
+    private:
+        template<AssetType T>
+        inline Pitaya::Core::AssetRef<T> FindAssetEntry(Pitaya::Core::GUID guid)
+        {
+            Pitaya::Core::AssetRef<T> asset = nullptr;
+            GetAssetEntryMap<T>().FindOperateKV(guid,
+                [&asset](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
+                {
+                    if (entry) { asset = entry; }
+                },
+                [](Pitaya::Core::GUID) {});
+            if (!asset)
+            {
+                Pitaya::Log::Error("builtin asset is registered but not initialized GUID:" + guid.ToString());
+            }
+            return asset;
+        }
+
+        void RegisterBuiltinAssets();
 
     private:
         template<AssetType T>
@@ -319,16 +345,7 @@ namespace Pitaya::Asset
 
     private:
         template<AssetType T>
-        inline bool IsBuildInAsset(Pitaya::Core::GUID guid)
-        {
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { return guid == Pitaya::Asset::Texture::White || guid == Pitaya::Asset::Texture::Black || guid == Pitaya::Asset::Texture::FlatNormal; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { return guid == Pitaya::Asset::Shader::PBRStatic || guid == Pitaya::Asset::Shader::PBRSkinned; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { return guid == Pitaya::Asset::Mesh::Cube || guid == Pitaya::Asset::Mesh::Panel || guid == Pitaya::Asset::Mesh::Sphere; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { return guid == Pitaya::Asset::Material::PBR; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { return false; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { return guid == Pitaya::Asset::SkyBox::Default; }
-        }
-        inline bool IsBuildInAsset(const std::filesystem::path& virtualPath)
+        inline bool IsEngineAssetPath(const std::filesystem::path& virtualPath)
         {
             return virtualPath.string().starts_with("engine:/");
         }
@@ -437,7 +454,8 @@ namespace Pitaya::Asset
         std::queue<Pitaya::Asset::AssetOperate> cacheAssetOperateQueue;	//渲染线程处理资源操作时的临时队列 避免长时间占用锁
 
         Pitaya::Asset::AssetHub::AssetRegistry registry;
-        Pitaya::Asset::AssetHub::BuildInAsset buildIn;
+        Pitaya::Asset::AssetHub::BuiltinAssetStorage builtins;
+        Pitaya::Asset::BuiltinAssetCatalog builtinCatalog;
     };
 }
 

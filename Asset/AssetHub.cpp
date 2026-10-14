@@ -29,8 +29,23 @@ namespace
     { ".rt" };
 }
 
+void Pitaya::Asset::AssetHub::RegisterBuiltinAssets()
+{
+    builtinCatalog.Register<Pitaya::Asset::Texture>(Pitaya::Asset::Texture::White, "White");
+    builtinCatalog.Register<Pitaya::Asset::Texture>(Pitaya::Asset::Texture::Black, "Black");
+    builtinCatalog.Register<Pitaya::Asset::Texture>(Pitaya::Asset::Texture::FlatNormal, "FlatNormal");
+    builtinCatalog.Register<Pitaya::Asset::Shader>(Pitaya::Asset::Shader::PBRStatic, "PBRStatic");
+    builtinCatalog.Register<Pitaya::Asset::Shader>(Pitaya::Asset::Shader::PBRSkinned, "PBRSkinned");
+    builtinCatalog.Register<Pitaya::Asset::Material>(Pitaya::Asset::Material::PBR, "PBR");
+    builtinCatalog.Register<Pitaya::Asset::Mesh>(Pitaya::Asset::Mesh::Cube, "Cube");
+    builtinCatalog.Register<Pitaya::Asset::Mesh>(Pitaya::Asset::Mesh::Panel, "Panel");
+    builtinCatalog.Register<Pitaya::Asset::Mesh>(Pitaya::Asset::Mesh::Sphere, "Sphere");
+    builtinCatalog.Register<Pitaya::Asset::SkyBox>(Pitaya::Asset::SkyBox::Default, "Default");
+}
+
 bool Pitaya::Asset::AssetHub::Initialize()
 {
+    RegisterBuiltinAssets();
     engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
     projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
     const std::filesystem::path registryFile = projectRoot / fileName;
@@ -42,9 +57,9 @@ bool Pitaya::Asset::AssetHub::Initialize()
     //White Texture
     do
     {
-        buildIn.White.Data.store(Pitaya::Core::New<Pitaya::Asset::Texture>(), std::memory_order_release);
-        buildIn.White.GUID = Pitaya::Asset::Texture::White;
-        buildIn.White.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.White.Data.store(Pitaya::Core::New<Pitaya::Asset::Texture>(), std::memory_order_release);
+        builtins.White.GUID = Pitaya::Asset::Texture::White;
+        builtins.White.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::Texture2DImportResult result;
         result.Width = 1;
         result.Height = 1;
@@ -54,17 +69,17 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.isNearest = true;
         result.Data = { 255, 255, 255, 255 };	//纯白贴图
         result.GUID = Pitaya::Asset::Texture::White;
-        buildIn.White.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        textures.Emplace(Pitaya::Asset::Texture::White, &buildIn.White);
+        builtins.White.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        textures.Emplace(Pitaya::Asset::Texture::White, &builtins.White);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //Black Texture
     do
     {
-        buildIn.Black.Data.store(Pitaya::Core::New<Pitaya::Asset::Texture>(), std::memory_order_release);
-        buildIn.Black.GUID = Pitaya::Asset::Texture::Black;
-        buildIn.Black.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.Black.Data.store(Pitaya::Core::New<Pitaya::Asset::Texture>(), std::memory_order_release);
+        builtins.Black.GUID = Pitaya::Asset::Texture::Black;
+        builtins.Black.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::Texture2DImportResult result;
         result.Width = 1;
         result.Height = 1;
@@ -74,17 +89,17 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.isNearest = true;
         result.Data = { 0, 0, 0, 255 };
         result.GUID = Pitaya::Asset::Texture::Black;
-        buildIn.Black.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        textures.Emplace(Pitaya::Asset::Texture::Black, &buildIn.Black);
+        builtins.Black.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        textures.Emplace(Pitaya::Asset::Texture::Black, &builtins.Black);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //FlatNormal Texture
     do
     {
-        buildIn.FlatNormal.Data.store(Pitaya::Core::New<Pitaya::Asset::Texture>(), std::memory_order_release);
-        buildIn.FlatNormal.GUID = Pitaya::Asset::Texture::FlatNormal;
-        buildIn.FlatNormal.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.FlatNormal.Data.store(Pitaya::Core::New<Pitaya::Asset::Texture>(), std::memory_order_release);
+        builtins.FlatNormal.GUID = Pitaya::Asset::Texture::FlatNormal;
+        builtins.FlatNormal.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::Texture2DImportResult result;
         result.Width = 1;
         result.Height = 1;
@@ -94,18 +109,18 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.isNearest = true;
         result.Data = { 128, 128, 255, 255 };
         result.GUID = Pitaya::Asset::Texture::FlatNormal;
-        buildIn.FlatNormal.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        textures.Emplace(Pitaya::Asset::Texture::FlatNormal, &buildIn.FlatNormal);
+        builtins.FlatNormal.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        textures.Emplace(Pitaya::Asset::Texture::FlatNormal, &builtins.FlatNormal);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //PBR Static Shader
     do
     {
-        buildIn.PBRStaticShader.Data.store(Pitaya::Core::New<Pitaya::Asset::Shader>(), std::memory_order_release);
-        buildIn.PBRStaticShader.GUID = Pitaya::Asset::Shader::PBRStatic;
+        builtins.PBRStaticShader.Data.store(Pitaya::Core::New<Pitaya::Asset::Shader>(), std::memory_order_release);
+        builtins.PBRStaticShader.GUID = Pitaya::Asset::Shader::PBRStatic;
         {
-            auto* shader = buildIn.PBRStaticShader.Data.load(std::memory_order_acquire);
+            auto* shader = builtins.PBRStaticShader.Data.load(std::memory_order_acquire);
             shader->ParamLayout.Slots =
             {
                 { "BaseColorFactor", Pitaya::Asset::ParamType::Vector,  0, 0,  16 },
@@ -126,7 +141,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
             shader->ParamLayout.TextureCount = 6;
             shader->ParamLayout.TotalBytes = 96;
         }
-        buildIn.PBRStaticShader.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.PBRStaticShader.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::ShaderImportResult result;
         {
             auto vsRc = Pitaya::Core::LoadBuiltInRC(IDR_PBR_STATIC_VERTEX_SHADER);
@@ -136,18 +151,18 @@ bool Pitaya::Asset::AssetHub::Initialize()
         }
         result.Type = Pitaya::GPU::Shader::VF;
         result.GUID = Pitaya::Asset::Shader::PBRStatic;
-        buildIn.PBRStaticShader.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        shaders.Emplace(Pitaya::Asset::Shader::PBRStatic, &buildIn.PBRStaticShader);
+        builtins.PBRStaticShader.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        shaders.Emplace(Pitaya::Asset::Shader::PBRStatic, &builtins.PBRStaticShader);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //PBR Skinned Shader
     do
     {
-        buildIn.PBRSkinnedShader.Data.store(Pitaya::Core::New<Pitaya::Asset::Shader>(), std::memory_order_release);
-        buildIn.PBRSkinnedShader.GUID = Pitaya::Asset::Shader::PBRSkinned;
+        builtins.PBRSkinnedShader.Data.store(Pitaya::Core::New<Pitaya::Asset::Shader>(), std::memory_order_release);
+        builtins.PBRSkinnedShader.GUID = Pitaya::Asset::Shader::PBRSkinned;
         {
-            auto* shader = buildIn.PBRSkinnedShader.Data.load(std::memory_order_acquire);
+            auto* shader = builtins.PBRSkinnedShader.Data.load(std::memory_order_acquire);
             shader->ParamLayout.Slots =
             {
                 { "BaseColorFactor", Pitaya::Asset::ParamType::Vector,  0, 0,  16 },
@@ -168,7 +183,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
             shader->ParamLayout.TextureCount = 6;
             shader->ParamLayout.TotalBytes = 96;
         }
-        buildIn.PBRSkinnedShader.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.PBRSkinnedShader.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::ShaderImportResult result;
         {
             auto vsRc = Pitaya::Core::LoadBuiltInRC(IDR_PBR_SKINNED_VERTEX_SHADER);
@@ -178,18 +193,18 @@ bool Pitaya::Asset::AssetHub::Initialize()
         }
         result.Type = Pitaya::GPU::Shader::VF;
         result.GUID = Pitaya::Asset::Shader::PBRSkinned;
-        buildIn.PBRSkinnedShader.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        shaders.Emplace(Pitaya::Asset::Shader::PBRSkinned, &buildIn.PBRSkinnedShader);
+        builtins.PBRSkinnedShader.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        shaders.Emplace(Pitaya::Asset::Shader::PBRSkinned, &builtins.PBRSkinnedShader);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //PBR Material
     do
     {
-        buildIn.PBRMaterial.Data.store(Pitaya::Core::New<Pitaya::Asset::Material>(), std::memory_order_release);
-        buildIn.PBRMaterial.GUID = Pitaya::Asset::Material::PBR;
-        buildIn.PBRMaterial.State.SetBits(Pitaya::Core::AssetState::CPULoading);
-        auto* materialNativeData = buildIn.PBRMaterial.Data.load(std::memory_order_acquire);
+        builtins.PBRMaterial.Data.store(Pitaya::Core::New<Pitaya::Asset::Material>(), std::memory_order_release);
+        builtins.PBRMaterial.GUID = Pitaya::Asset::Material::PBR;
+        builtins.PBRMaterial.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        auto* materialNativeData = builtins.PBRMaterial.Data.load(std::memory_order_acquire);
         materialNativeData->Shader = LoadAsset<Pitaya::Asset::Shader>(Pitaya::Asset::Shader::PBRStatic);
         materialNativeData->VectorParams.resize(materialNativeData->Shader->ParamLayout.VectorCount);
         materialNativeData->FloatParams.resize(materialNativeData->Shader->ParamLayout.FloatCount);
@@ -206,17 +221,17 @@ bool Pitaya::Asset::AssetHub::Initialize()
         materialNativeData->SetTexture("uRoughnessMap", Pitaya::Asset::Texture::White);
         materialNativeData->SetTexture("uAOMap",        Pitaya::Asset::Texture::White);
         materialNativeData->SetTexture("uEmissiveMap",  Pitaya::Asset::Texture::Black);
-        buildIn.PBRMaterial.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        buildIn.PBRMaterial.State.SetBits(Pitaya::Core::AssetState::GPULoaded);
-        materials.Emplace(Pitaya::Asset::Material::PBR, &buildIn.PBRMaterial);
+        builtins.PBRMaterial.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        builtins.PBRMaterial.State.SetBits(Pitaya::Core::AssetState::GPULoaded);
+        materials.Emplace(Pitaya::Asset::Material::PBR, &builtins.PBRMaterial);
     } while (false);
 
     //Cube Mesh
     do
     {
-        buildIn.Cube.Data.store(Pitaya::Core::New<Pitaya::Asset::Mesh>(), std::memory_order_release);
-        buildIn.Cube.GUID = Pitaya::Asset::Mesh::Cube;
-        buildIn.Cube.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.Cube.Data.store(Pitaya::Core::New<Pitaya::Asset::Mesh>(), std::memory_order_release);
+        builtins.Cube.GUID = Pitaya::Asset::Mesh::Cube;
+        builtins.Cube.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::StaticMeshImportResult result;
         result.GUID = Pitaya::Asset::Mesh::Cube;
         result.IsValid = true;
@@ -284,17 +299,17 @@ bool Pitaya::Asset::AssetHub::Initialize()
             { Pitaya::GPU::ShaderVariableType::Float2, 2 },
             { Pitaya::GPU::ShaderVariableType::Float4, 3 } };
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
-        buildIn.Cube.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        meshes.Emplace(Pitaya::Asset::Mesh::Cube, &buildIn.Cube);
+        builtins.Cube.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        meshes.Emplace(Pitaya::Asset::Mesh::Cube, &builtins.Cube);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //Panel Mesh
     do
     {
-        buildIn.Panel.Data.store(Pitaya::Core::New<Pitaya::Asset::Mesh>(), std::memory_order_release);
-        buildIn.Panel.GUID = Pitaya::Asset::Mesh::Panel;
-        buildIn.Panel.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.Panel.Data.store(Pitaya::Core::New<Pitaya::Asset::Mesh>(), std::memory_order_release);
+        builtins.Panel.GUID = Pitaya::Asset::Mesh::Panel;
+        builtins.Panel.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         Pitaya::Import::StaticMeshImportResult result;
         result.GUID = Pitaya::Asset::Mesh::Panel;
         result.IsValid = true;
@@ -323,17 +338,17 @@ bool Pitaya::Asset::AssetHub::Initialize()
             { Pitaya::GPU::ShaderVariableType::Float4, 3 } };
         result.BoundingBox = sub.BoundingBox;
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
-        buildIn.Panel.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        meshes.Emplace(Pitaya::Asset::Mesh::Panel, &buildIn.Panel);
+        builtins.Panel.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        meshes.Emplace(Pitaya::Asset::Mesh::Panel, &builtins.Panel);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //Sphere Mesh
     do
     {
-        buildIn.Sphere.Data.store(Pitaya::Core::New<Pitaya::Asset::Mesh>(), std::memory_order_release);
-        buildIn.Sphere.GUID = Pitaya::Asset::Mesh::Sphere;
-        buildIn.Sphere.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.Sphere.Data.store(Pitaya::Core::New<Pitaya::Asset::Mesh>(), std::memory_order_release);
+        builtins.Sphere.GUID = Pitaya::Asset::Mesh::Sphere;
+        builtins.Sphere.State.SetBits(Pitaya::Core::AssetState::CPULoading);
 
         Pitaya::Import::StaticMeshImportResult result;
         result.GUID = Pitaya::Asset::Mesh::Sphere;
@@ -431,22 +446,22 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
 
         // 提交到引擎系统
-        buildIn.Sphere.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        meshes.Emplace(Pitaya::Asset::Mesh::Sphere, &buildIn.Sphere);
+        builtins.Sphere.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        meshes.Emplace(Pitaya::Asset::Mesh::Sphere, &builtins.Sphere);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
     //Default SkyBox
     do
     {
-        buildIn.DefaultSkyBox.Data.store(Pitaya::Core::New<Pitaya::Asset::SkyBox>(), std::memory_order_release);
-        buildIn.DefaultSkyBox.GUID = Pitaya::Asset::SkyBox::Default;
-        buildIn.DefaultSkyBox.State.SetBits(Pitaya::Core::AssetState::CPULoading);
+        builtins.DefaultSkyBox.Data.store(Pitaya::Core::New<Pitaya::Asset::SkyBox>(), std::memory_order_release);
+        builtins.DefaultSkyBox.GUID = Pitaya::Asset::SkyBox::Default;
+        builtins.DefaultSkyBox.State.SetBits(Pitaya::Core::AssetState::CPULoading);
         auto rc = Pitaya::Core::LoadBuiltInRC(IDR_SKYBOX_HDR);
         Pitaya::Import::SkyBoxImportResult result;
         Pitaya::Import::Import(Pitaya::Asset::SkyBox::Default, rc.data, rc.size, true, result);
-        buildIn.DefaultSkyBox.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        skyboxes.Emplace(Pitaya::Asset::SkyBox::Default, &buildIn.DefaultSkyBox);
+        builtins.DefaultSkyBox.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+        skyboxes.Emplace(Pitaya::Asset::SkyBox::Default, &builtins.DefaultSkyBox);
         cacheAssetOperateQueue.push({ result });
     } while (false);
 
@@ -554,16 +569,16 @@ void Pitaya::Asset::AssetHub::Release()
         });
 
     //清除内置资源
-    Pitaya::Core::Delete(buildIn.PBRStaticShader.Data.load(std::memory_order_acquire)); buildIn.PBRStaticShader.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.PBRSkinnedShader.Data.load(std::memory_order_acquire)); buildIn.PBRSkinnedShader.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.White.Data.load(std::memory_order_acquire)); buildIn.White.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.Black.Data.load(std::memory_order_acquire)); buildIn.Black.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.FlatNormal.Data.load(std::memory_order_acquire)); buildIn.FlatNormal.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.PBRMaterial.Data.load(std::memory_order_acquire)); buildIn.PBRMaterial.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.Cube.Data.load(std::memory_order_acquire)); buildIn.Cube.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.Sphere.Data.load(std::memory_order_acquire)); buildIn.Sphere.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.Panel.Data.load(std::memory_order_acquire)); buildIn.Panel.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(buildIn.DefaultSkyBox.Data.load(std::memory_order_acquire)); buildIn.DefaultSkyBox.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.PBRStaticShader.Data.load(std::memory_order_acquire)); builtins.PBRStaticShader.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.PBRSkinnedShader.Data.load(std::memory_order_acquire)); builtins.PBRSkinnedShader.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.White.Data.load(std::memory_order_acquire)); builtins.White.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.Black.Data.load(std::memory_order_acquire)); builtins.Black.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.FlatNormal.Data.load(std::memory_order_acquire)); builtins.FlatNormal.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.PBRMaterial.Data.load(std::memory_order_acquire)); builtins.PBRMaterial.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.Cube.Data.load(std::memory_order_acquire)); builtins.Cube.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.Sphere.Data.load(std::memory_order_acquire)); builtins.Sphere.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.Panel.Data.load(std::memory_order_acquire)); builtins.Panel.Data.store(nullptr, std::memory_order_release);
+    Pitaya::Core::Delete(builtins.DefaultSkyBox.Data.load(std::memory_order_acquire)); builtins.DefaultSkyBox.Data.store(nullptr, std::memory_order_release);
 
     registry.SerializeToFile(projectRoot / fileName);
 }
@@ -1097,7 +1112,7 @@ bool Pitaya::Asset::AssetHub::RegisterExternalFile(const std::filesystem::path& 
     }
 
     //如果是引擎内置资源
-    if (IsBuildInAsset(out_virtualpath))
+    if (IsEngineAssetPath(out_virtualpath))
     {
         Pitaya::Log::Error("register external file fail, cant registe engine buildin asset, path:" + inputPath.string());
         return false;
