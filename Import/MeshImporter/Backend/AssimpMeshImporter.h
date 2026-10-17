@@ -28,13 +28,13 @@ namespace Pitaya::Import
 		~AssimpMeshImporter()override = default;
 
 	public:
-		bool Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, Pitaya::Import::MeshPreloadResult& out) override;
-		bool Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::StaticMeshImportResult& out) override;
-		bool Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::SkinnedMeshImportResult& out) override;
+		bool Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, Pitaya::Import::MeshPreloadResult& out, const Pitaya::Import::ImportContext* context = nullptr) override;
+		bool Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::StaticMeshImportResult& out, const Pitaya::Import::ImportContext* context = nullptr) override;
+		bool Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::SkinnedMeshImportResult& out, const Pitaya::Import::ImportContext* context = nullptr) override;
 	
 	private:
 		void TraverseNodes(aiNode* node, const glm::mat4& parentTransform, std::vector<Pitaya::Import::MeshPreloadResult::MeshNodeInfo>& outMeshInfos);
-		bool ParseMaterial(const aiMaterial* aimaterial, const std::filesystem::path& matFilePath, const std::filesystem::path& modelFilePath);
+		bool ParseMaterial(const aiMaterial* aimaterial, const std::filesystem::path& matFilePath, const std::filesystem::path& modelFilePath, const Pitaya::Import::ImportContext* context);
 
 	private:
 		inline Pitaya::GPU::TextureSlot AiTextureTypeToTextureUsage(aiTextureType aiType) const noexcept

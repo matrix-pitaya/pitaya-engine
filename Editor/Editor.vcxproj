@@ -120,8 +120,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\mimalloc\lib\;$(SolutionDir)thirdparty\GLFW\lib\;$(SolutionDir)thirdparty\GLEW\lib\;$(SolutionDir)library\$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>mimalloc.dll.lib;ucrt.lib;msvcrt.lib;glew32.lib;glfw3dll.lib;Opengl32.lib;Engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\mimalloc\lib\;$(SolutionDir)thirdparty\ASSIMP\lib\;$(SolutionDir)thirdparty\GLFW\lib\;$(SolutionDir)thirdparty\GLEW\lib\;$(SolutionDir)library\$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>mimalloc.dll.lib;assimp-vc143-mt.lib;draco.lib;kubazip.lib;minizip.lib;poly2tri.lib;polyclipping.lib;pugixml.lib;zlib.lib;ucrt.lib;msvcrt.lib;glew32.lib;glfw3dll.lib;Opengl32.lib;Import.lib;Engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>ucrt.lib;msvcrt.lib</IgnoreSpecificDefaultLibraries>
       <DelayLoadDLLs>%(DelayLoadDLLs)</DelayLoadDLLs>
       <AdditionalOptions>/INCLUDE:mi_version %(AdditionalOptions)</AdditionalOptions>
@@ -163,8 +163,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\mimalloc\lib\;$(SolutionDir)thirdparty\GLFW\lib\;$(SolutionDir)thirdparty\GLEW\lib\;$(SolutionDir)library\$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>mimalloc.dll.lib;ucrt.lib;msvcrt.lib;glew32.lib;glfw3dll.lib;Opengl32.lib;Engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\mimalloc\lib\;$(SolutionDir)thirdparty\ASSIMP\lib\;$(SolutionDir)thirdparty\GLFW\lib\;$(SolutionDir)thirdparty\GLEW\lib\;$(SolutionDir)library\$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>mimalloc.dll.lib;assimp-vc143-mt.lib;draco.lib;kubazip.lib;minizip.lib;poly2tri.lib;polyclipping.lib;pugixml.lib;zlib.lib;ucrt.lib;msvcrt.lib;glew32.lib;glfw3dll.lib;Opengl32.lib;Import.lib;Engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>ucrt.lib;msvcrt.lib</IgnoreSpecificDefaultLibraries>
       <DelayLoadDLLs>%(DelayLoadDLLs)</DelayLoadDLLs>
       <AdditionalOptions>/INCLUDE:mi_version %(AdditionalOptions)</AdditionalOptions>

@@ -29,6 +29,38 @@ namespace
     { ".mat" };
     const std::unordered_set<std::string> RenderTargetExtensions =
     { ".rt" };
+
+    bool TransformImportPath(void* userData, const std::filesystem::path& inputPath,
+        const std::filesystem::path& basePath, std::filesystem::path& outPath)
+    {
+        auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+        return assetHub && assetHub->TransformToVirtualPath(inputPath, basePath, outPath);
+    }
+
+    bool ResolveImportGUID(void* userData, const std::filesystem::path& path,
+        Pitaya::Core::GUID& outGUID)
+    {
+        auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+        return assetHub && assetHub->GetAssetGUIDByPath(path, outGUID);
+    }
+
+    bool RegisterImportFile(void* userData, const std::filesystem::path& inputPath,
+        const std::filesystem::path& basePath, std::filesystem::path& outVirtualPath,
+        Pitaya::Core::GUID& outGUID)
+    {
+        auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+        return assetHub && assetHub->RegisterExternalFile(inputPath, basePath, outVirtualPath, outGUID);
+    }
+}
+
+Pitaya::Import::ImportContext Pitaya::Asset::AssetHub::GetImportContext() noexcept
+{
+    return Pitaya::Import::ImportContext{
+        this,
+        &TransformImportPath,
+        &ResolveImportGUID,
+        &RegisterImportFile
+    };
 }
 
 void Pitaya::Asset::AssetHub::RegisterBuiltinAssets()
@@ -1360,7 +1392,7 @@ void Pitaya::Asset::AssetHub::LoadTextureAsset(Pitaya::Core::GUID guid, const st
         {
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
             cpuOpResult_Out.Data = cpuOpResult_Inner;
-            assetOperateQueue.Push(cpuOpResult_Out);
+            assetOperateQueue.Push(std::move(cpuOpResult_Out));
         }
         else
         {
@@ -1539,7 +1571,7 @@ void Pitaya::Asset::AssetHub::LoadShaderAsset(Pitaya::Core::GUID guid, const std
             Pitaya::Log::Info(folder.string() + " load success");
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
             cpuOpResult_Out.Data = cpuOpResult_Inner;
-            assetOperateQueue.Push(cpuOpResult_Out);
+            assetOperateQueue.Push(std::move(cpuOpResult_Out));
         }
         else
         {
@@ -1679,7 +1711,8 @@ void Pitaya::Asset::AssetHub::LoadMeshAsset(Pitaya::Core::GUID guid, const std::
     }
 
     Pitaya::Import::MeshPreloadResult preloadResult;
-    if (!Pitaya::Import::Import(guid, file, preloadResult))
+    const auto importContext = GetImportContext();
+    if (!Pitaya::Import::Import(guid, file, preloadResult, Pitaya::Import::MeshAPI::Assimp, &importContext))
     {
         Pitaya::Log::Error("GUID:" + guid.ToString() + " preload fail, path:" + file.string());
         return;
@@ -1693,7 +1726,7 @@ void Pitaya::Asset::AssetHub::LoadMeshAsset(Pitaya::Core::GUID guid, const std::
             Pitaya::Log::Info("static mesh asset load success in cpu");
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
             cpuOpResult_Out.Data = cpuOpResult_Inner;
-            assetOperateQueue.Push(cpuOpResult_Out);
+            assetOperateQueue.Push(std::move(cpuOpResult_Out));
         }
         else
         {
@@ -1742,7 +1775,8 @@ bool Pitaya::Asset::AssetHub::LoadStaticMeshAsset(Pitaya::Core::GUID guid, const
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry) { return false; }
 
-    if (!Pitaya::Import::Import(guid, file, preloadResult, out))
+    const auto importContext = GetImportContext();
+    if (!Pitaya::Import::Import(guid, file, preloadResult, out, Pitaya::Import::MeshAPI::Assimp, &importContext))
     {
         Pitaya::Log::Error("static mesh load fail, GUID:" + guid.ToString() + ", path:" + path);
         entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading);
@@ -1880,7 +1914,7 @@ void Pitaya::Asset::AssetHub::LoadRenderTarget(Pitaya::Core::GUID guid, const st
     cpuOpResult_Inner.GUID = guid;
     Pitaya::Asset::AssetOperate cpuOpResult_Out;
     cpuOpResult_Out.Data = cpuOpResult_Inner;
-    assetOperateQueue.Push(cpuOpResult_Out);
+    assetOperateQueue.Push(std::move(cpuOpResult_Out));
 
     entry->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
 }

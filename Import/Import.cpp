@@ -58,17 +58,17 @@ bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path
 {
     return ShaderImporter().Import(guid, folder, vertexPath, fragmentPath, geometryPath, out);
 }
-bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, Pitaya::Import::MeshPreloadResult& out, Pitaya::Import::MeshAPI api)
+bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, Pitaya::Import::MeshPreloadResult& out, Pitaya::Import::MeshAPI api, const Pitaya::Import::ImportContext* context)
 {
-    return CreateMeshImporter(api)->Import(guid, file, out);
+	return CreateMeshImporter(api)->Import(guid, file, out, context);
 }
-bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::StaticMeshImportResult& out, Pitaya::Import::MeshAPI api)
+bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::StaticMeshImportResult& out, Pitaya::Import::MeshAPI api, const Pitaya::Import::ImportContext* context)
 {
-    return CreateMeshImporter(api)->Import(guid, file, preload, out);
+	return CreateMeshImporter(api)->Import(guid, file, preload, out, context);
 }
-bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::SkinnedMeshImportResult& out, Pitaya::Import::MeshAPI api)
+bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::SkinnedMeshImportResult& out, Pitaya::Import::MeshAPI api, const Pitaya::Import::ImportContext* context)
 {
-    return CreateMeshImporter(api)->Import(guid, file, preload, out);
+	return CreateMeshImporter(api)->Import(guid, file, preload, out, context);
 }
 bool Pitaya::Import::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, bool isFlipVerticallyOnLoad, Pitaya::Import::SkyBoxImportResult& out)
 {

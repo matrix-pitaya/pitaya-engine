@@ -1,0 +1,53 @@
+#pragma once
+
+#include<Core/Identifier/GUID.h>
+
+#include<filesystem>
+
+namespace Pitaya::Import
+{
+    // Importers must not depend on AssetHub or AssetDatabase directly. The
+    // coordinator above Import supplies these optional callbacks when an
+    // importer needs to resolve a generated dependency.
+    struct ImportContext
+    {
+        using TransformToVirtualPathFn = bool(*)(
+            void*, const std::filesystem::path&, const std::filesystem::path&, std::filesystem::path&);
+        using GetAssetGUIDByPathFn = bool(*)(void*, const std::filesystem::path&, Pitaya::Core::GUID&);
+        using RegisterExternalFileFn = bool(*)(
+            void*, const std::filesystem::path&, const std::filesystem::path&,
+            std::filesystem::path&, Pitaya::Core::GUID&);
+
+        void* UserData = nullptr;
+        TransformToVirtualPathFn TransformToVirtualPath = nullptr;
+        GetAssetGUIDByPathFn GetAssetGUIDByPath = nullptr;
+        RegisterExternalFileFn RegisterExternalFile = nullptr;
+
+        inline bool ResolveVirtualPath(
+            const std::filesystem::path& inputPath,
+            const std::filesystem::path& basePath,
+            std::filesystem::path& outPath) const
+        {
+            return TransformToVirtualPath &&
+                TransformToVirtualPath(UserData, inputPath, basePath, outPath);
+        }
+
+        inline bool ResolveGUID(
+            const std::filesystem::path& virtualPath,
+            Pitaya::Core::GUID& outGUID) const
+        {
+            return GetAssetGUIDByPath &&
+                GetAssetGUIDByPath(UserData, virtualPath, outGUID);
+        }
+
+        inline bool RegisterFile(
+            const std::filesystem::path& inputPath,
+            const std::filesystem::path& basePath,
+            std::filesystem::path& outVirtualPath,
+            Pitaya::Core::GUID& outGUID) const
+        {
+            return RegisterExternalFile &&
+                RegisterExternalFile(UserData, inputPath, basePath, outVirtualPath, outGUID);
+        }
+    };
+}

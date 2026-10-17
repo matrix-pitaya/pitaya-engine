@@ -15,10 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="API\def.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="Import.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Common\ImportResult.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\ImportContext.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="MeshImporter\Backend\AssimpMeshImporter.h">

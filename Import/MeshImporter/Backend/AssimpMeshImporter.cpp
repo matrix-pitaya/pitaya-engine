@@ -73,7 +73,7 @@ namespace
     }
 }
 
-bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, Pitaya::Import::MeshPreloadResult& out)
+bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, Pitaya::Import::MeshPreloadResult& out, const Pitaya::Import::ImportContext* context)
 {
     Assimp::Importer importer;
     const aiScene* scene = importer.ReadFile(file.string(),
@@ -126,18 +126,23 @@ bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const s
 
         std::filesystem::path matFilePath = file.parent_path() / std::filesystem::path(matName + ".mat");
         std::filesystem::path virtualpath;
-        if (!Pitaya::Asset::TransformToVirtualPath(matFilePath, file.parent_path(), virtualpath)) { continue; }
+        if (!context || !context->ResolveVirtualPath(matFilePath, file.parent_path(), virtualpath)) { continue; }
         Pitaya::Core::GUID matGuid;
-        if (!Pitaya::Asset::GetAssetGUIDByPath(virtualpath, matGuid)) //材质不存在
+        if (!context->ResolveGUID(virtualpath, matGuid)) //材质不存在
         {
             //解析材质(内部会生成.mat文件)
-            if (!ParseMaterial(aiMat, matFilePath, file))
+            if (!ParseMaterial(aiMat, matFilePath, file, context))
             {
                 Pitaya::Log::Error("failed to serialize material: " + matGuid.ToString());
                 out.IsValid = false;
                 return false;
             }
-            Pitaya::Asset::RegisterExternalFile(matFilePath, file.parent_path(), virtualpath, matGuid);
+            if (!context->RegisterFile(matFilePath, file.parent_path(), virtualpath, matGuid))
+            {
+                Pitaya::Log::Error("failed to register generated material: " + matFilePath.string());
+                out.IsValid = false;
+                return false;
+            }
         }
         out.MaterialGUIDs.push_back(matGuid);
     }
@@ -189,7 +194,7 @@ bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const s
     out.IsValid = true;
     return true;
 }
-bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::StaticMeshImportResult& out)
+bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::StaticMeshImportResult& out, const Pitaya::Import::ImportContext* context)
 {
     // 必须保留 Flags: aiProcess_CalcTangentSpace | aiProcess_Triangulate | aiProcess_GenSmoothNormals
     Assimp::Importer importer;
@@ -335,7 +340,7 @@ bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const s
     out.IsValid = true;
     return true;
 }
-bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::SkinnedMeshImportResult& out)
+bool Pitaya::Import::AssimpMeshImporter::Import(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& preload, Pitaya::Import::SkinnedMeshImportResult& out, const Pitaya::Import::ImportContext* context)
 {
     if (!preload.IsValid || preload.Type != Pitaya::GPU::MeshType::SkinnedMesh)
     {
@@ -623,7 +628,7 @@ void Pitaya::Import::AssimpMeshImporter::TraverseNodes(aiNode* node, const glm::
         TraverseNodes(node->mChildren[i], globalTransform, outMeshInfos);
     }
 }
-bool Pitaya::Import::AssimpMeshImporter::ParseMaterial(const aiMaterial* aimaterial, const std::filesystem::path& matFilePath, const std::filesystem::path& modelFilePath)  //TODO逻辑有点问题 主要是为了把Assimp的材质转化为Engine的.mat材质 后面再修复
+bool Pitaya::Import::AssimpMeshImporter::ParseMaterial(const aiMaterial* aimaterial, const std::filesystem::path& matFilePath, const std::filesystem::path& modelFilePath, const Pitaya::Import::ImportContext* context)  //TODO逻辑有点问题 主要是为了把Assimp的材质转化为Engine的.mat材质 后面再修复
 {
     Pitaya::Asset::Material material;
 
@@ -694,8 +699,8 @@ bool Pitaya::Import::AssimpMeshImporter::ParseMaterial(const aiMaterial* aimater
         {
             Pitaya::Core::GUID texGuid;
             std::filesystem::path virtualpath;
-            if (!(Pitaya::Asset::TransformToVirtualPath(path.C_Str(), modelFilePath.parent_path(), virtualpath) &&
-                Pitaya::Asset::GetAssetGUIDByPath(virtualpath, texGuid)))
+            if (!(context && context->ResolveVirtualPath(std::filesystem::path(path.C_Str()), modelFilePath.parent_path(), virtualpath) &&
+                context->ResolveGUID(virtualpath, texGuid)))
             {
                 texGuid = Pitaya::Asset::Texture::White;
             }

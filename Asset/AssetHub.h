@@ -14,6 +14,7 @@
 #include<GPU/Common/ShaderType.h>
 #include<Import/TextureImporter/Frontend/TextureImporter.h>
 #include<Import/ShaderImporter/ShaderImporter.h>
+#include<Import/Common/ImportContext.h>
 #include<Asset/Common/AssetOperate.h>
 #include<Asset/Common/Material.h>
 #include<Asset/Common/Mesh.h>
@@ -175,6 +176,7 @@ namespace Pitaya::Asset
         }
 
         void RegisterBuiltinAssets();
+        Pitaya::Import::ImportContext GetImportContext() noexcept;
 
     private:
         template<AssetType T>
