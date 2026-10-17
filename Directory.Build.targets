@@ -1,0 +1,6 @@
+<Project>
+  <Target Name="PitayaRequireSolutionBuild" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(SolutionDir)Pitaya.sln')"
+           Text="Pitaya projects must be built from Pitaya.sln. Direct .vcxproj builds are disabled." />
+  </Target>
+</Project>

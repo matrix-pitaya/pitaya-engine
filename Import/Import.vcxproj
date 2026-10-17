@@ -57,10 +57,6 @@
     <!-- Resolve paths from this project file so output never falls under Import/. -->
     <PitayaWorkspaceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</PitayaWorkspaceRoot>
   </PropertyGroup>
-  <Target Name="PitayaRequireSolutionBuild" BeforeTargets="PrepareForBuild">
-    <Error Condition="!Exists('$(SolutionDir)Pitaya.sln')"
-           Text="Import.vcxproj must be built from Pitaya.sln. Direct project builds are disabled so output stays in the repository root." />
-  </Target>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">

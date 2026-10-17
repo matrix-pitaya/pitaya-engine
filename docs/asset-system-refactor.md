@@ -198,7 +198,7 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 所有 C++ 项目必须从仓库根目录的 `Pitaya.sln` 构建。禁止直接对单个 `.vcxproj` 执行构建，因为 Visual Studio 在这种情况下会把 `$(SolutionDir)` 解析成项目目录，导致 `intermediate` 和 `library` 出现在项目文件夹内部。
 
-`Import/Import.vcxproj` 已加入强制检查：如果 `$(SolutionDir)Pitaya.sln` 不存在，构建会直接失败；输出路径同时改为基于项目文件计算仓库根目录，固定写入：
+仓库根目录的 `Directory.Build.targets` 已加入强制检查：如果 `$(SolutionDir)Pitaya.sln` 不存在，任何 C++ 项目构建都会直接失败。`Import/Import.vcxproj` 的输出路径同时改为基于项目文件计算仓库根目录，固定写入：
 
 ```text
 <workspace>/intermediate/<Project>/<Configuration>/
