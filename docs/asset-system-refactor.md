@@ -144,9 +144,10 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 ### 阶段一：切断 Import 到 Asset 的反向调用
 
 - 增加 `ImportContext`，由上层提供路径和资产注册回调。
-- Assimp 通过上下文请求依赖解析，不再直接 include Asset API。
+- Assimp 通过上下文请求依赖解析，不再直接调用 AssetHub 的路径、GUID 和材质序列化 API。
+- Assimp 只生成 `MaterialImportSource`，材质文件生成和纹理 GUID 注册由 AssetHub 回调完成。
 - 保留旧 `Import::Import` 重载，内部转发到带上下文的新接口。
-- 暂时保持现有 ImportResult，保证运行时行为和构建稳定。
+- 暂时保持 MeshImportResult 中的 GPU/Asset 数据结构，保证运行时行为和构建稳定；下一阶段再替换为 Import 自有的中立 MeshData。
 
 ### 阶段二：拆 AssetDatabase 和 VirtualFileSystem
 
@@ -176,7 +177,7 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 ## 6. 当前阶段验收标准
 
-- Import 工程可以在不 include `Asset/Common/*` 的情况下构建。
+- Assimp 导入器不再构造 `AssetEntry`、`AssetRef` 或直接写 Asset 文件。
 - Import 不再直接调用 Asset 的路径、GUID 或序列化 API。
 - AssetHub 仍能通过旧的 `LoadAsset<T>(GUID)` API 加载现有资源。
 - Release x64 构建通过。

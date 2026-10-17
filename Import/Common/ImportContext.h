@@ -1,6 +1,7 @@
 #pragma once
 
 #include<Core/Identifier/GUID.h>
+#include<Import/Common/ImportMaterial.h>
 
 #include<filesystem>
 
@@ -17,11 +18,16 @@ namespace Pitaya::Import
         using RegisterExternalFileFn = bool(*)(
             void*, const std::filesystem::path&, const std::filesystem::path&,
             std::filesystem::path&, Pitaya::Core::GUID&);
+        using RegisterMaterialFn = bool(*)(
+            void*, const std::filesystem::path&, const std::filesystem::path&,
+            const MaterialImportSource&, Pitaya::Core::GUID&);
 
         void* UserData = nullptr;
         TransformToVirtualPathFn TransformToVirtualPath = nullptr;
         GetAssetGUIDByPathFn GetAssetGUIDByPath = nullptr;
         RegisterExternalFileFn RegisterExternalFile = nullptr;
+        RegisterMaterialFn RegisterMaterial = nullptr;
+        Pitaya::Core::GUID DefaultMaterialGUID;
 
         inline bool ResolveVirtualPath(
             const std::filesystem::path& inputPath,
@@ -48,6 +54,16 @@ namespace Pitaya::Import
         {
             return RegisterExternalFile &&
                 RegisterExternalFile(UserData, inputPath, basePath, outVirtualPath, outGUID);
+        }
+
+        inline bool RegisterGeneratedMaterial(
+            const std::filesystem::path& materialPath,
+            const std::filesystem::path& modelDirectory,
+            const MaterialImportSource& source,
+            Pitaya::Core::GUID& outGUID) const
+        {
+            return RegisterMaterial && RegisterMaterial(
+                UserData, materialPath, modelDirectory, source, outGUID);
         }
     };
 }

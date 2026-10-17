@@ -34,7 +34,6 @@ namespace Pitaya::Import
 	
 	private:
 		void TraverseNodes(aiNode* node, const glm::mat4& parentTransform, std::vector<Pitaya::Import::MeshPreloadResult::MeshNodeInfo>& outMeshInfos);
-		bool ParseMaterial(const aiMaterial* aimaterial, const std::filesystem::path& matFilePath, const std::filesystem::path& modelFilePath, const Pitaya::Import::ImportContext* context);
 
 	private:
 		inline Pitaya::GPU::TextureSlot AiTextureTypeToTextureUsage(aiTextureType aiType) const noexcept

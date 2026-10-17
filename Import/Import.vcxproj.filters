@@ -27,6 +27,9 @@
     <ClInclude Include="Common\ImportContext.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="Common\ImportMaterial.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="MeshImporter\Backend\AssimpMeshImporter.h">
       <Filter>头文件</Filter>
     </ClInclude>

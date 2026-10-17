@@ -272,6 +272,8 @@ namespace Pitaya::Asset
     public:
         bool TransformToVirtualPath(const std::filesystem::path& inputPath, const std::filesystem::path& basePath, std::filesystem::path& out_virtualpath) const;
         bool RegisterExternalFile(const std::filesystem::path& inputPath, const std::filesystem::path& basePath, std::filesystem::path& out_virtualpath, Pitaya::Core::GUID& out_guid);
+        bool RegisterGeneratedMaterial(const std::filesystem::path& materialPath, const std::filesystem::path& modelDirectory,
+            const Pitaya::Import::MaterialImportSource& source, Pitaya::Core::GUID& out_guid);
 
     private:
         template<AssetType T>

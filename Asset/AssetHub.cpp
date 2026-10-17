@@ -51,6 +51,15 @@ namespace
         auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
         return assetHub && assetHub->RegisterExternalFile(inputPath, basePath, outVirtualPath, outGUID);
     }
+
+    bool RegisterImportMaterial(void* userData, const std::filesystem::path& materialPath,
+        const std::filesystem::path& modelDirectory,
+        const Pitaya::Import::MaterialImportSource& source,
+        Pitaya::Core::GUID& outGUID)
+    {
+        auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+        return assetHub && assetHub->RegisterGeneratedMaterial(materialPath, modelDirectory, source, outGUID);
+    }
 }
 
 Pitaya::Import::ImportContext Pitaya::Asset::AssetHub::GetImportContext() noexcept
@@ -59,7 +68,9 @@ Pitaya::Import::ImportContext Pitaya::Asset::AssetHub::GetImportContext() noexce
         this,
         &TransformImportPath,
         &ResolveImportGUID,
-        &RegisterImportFile
+        &RegisterImportFile,
+        &RegisterImportMaterial,
+        Pitaya::Asset::Material::PBR
     };
 }
 
@@ -1177,6 +1188,58 @@ bool Pitaya::Asset::AssetHub::RegisterExternalFile(const std::filesystem::path& 
         Pitaya::Log::Warning("asset registry could not be saved, path:" + (projectRoot / fileName).string());
     }
     return true;
+}
+
+bool Pitaya::Asset::AssetHub::RegisterGeneratedMaterial(
+    const std::filesystem::path& materialPath,
+    const std::filesystem::path& modelDirectory,
+    const Pitaya::Import::MaterialImportSource& source,
+    Pitaya::Core::GUID& out_guid)
+{
+    Pitaya::Asset::Material material;
+    material.Shader = LoadAsset<Pitaya::Asset::Shader>(Pitaya::Asset::Shader::PBRStatic);
+    if (!material.Shader)
+    {
+        Pitaya::Log::Error("generated material cannot resolve PBR shader, path:" + materialPath.string());
+        return false;
+    }
+
+    material.VectorParams.resize(material.Shader->ParamLayout.VectorCount);
+    material.FloatParams.resize(material.Shader->ParamLayout.FloatCount);
+    material.Textures.resize(material.Shader->ParamLayout.TextureCount);
+
+    for (const auto& property : source.FloatProperties)
+    {
+        material.SetFloat(property.Name, property.Value);
+    }
+    for (const auto& property : source.VectorProperties)
+    {
+        material.SetVec4(property.Name, property.Value);
+    }
+    for (const auto& property : source.TextureProperties)
+    {
+        const std::filesystem::path absoluteTexturePath =
+            property.SourcePath.is_absolute() ? property.SourcePath : modelDirectory / property.SourcePath;
+        std::filesystem::path virtualTexturePath;
+        Pitaya::Core::GUID textureGUID = Pitaya::Asset::Texture::White;
+        if (TransformToVirtualPath(absoluteTexturePath, modelDirectory, virtualTexturePath))
+        {
+            if (!GetAssetGUIDByPath(virtualTexturePath, textureGUID))
+            {
+                RegisterExternalFile(absoluteTexturePath, modelDirectory, virtualTexturePath, textureGUID);
+            }
+        }
+        material.SetTexture(property.Name, textureGUID);
+    }
+
+    if (!material.SerializeToFile(materialPath))
+    {
+        Pitaya::Log::Error("generated material serialize fail, path:" + materialPath.string());
+        return false;
+    }
+
+    std::filesystem::path virtualMaterialPath;
+    return RegisterExternalFile(materialPath, modelDirectory, virtualMaterialPath, out_guid);
 }
 
 //Pitaya::Asset::AssetType Pitaya::Asset::AssetHub::GetAssetType(const std::filesystem::path& path) const

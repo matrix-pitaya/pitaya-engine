@@ -163,6 +163,7 @@
     <ClInclude Include="API\def.h" />
     <ClInclude Include="Common\MeshVertex.h" />
     <ClInclude Include="Common\ImportContext.h" />
+    <ClInclude Include="Common\ImportMaterial.h" />
     <ClInclude Include="Import.h" />
     <ClInclude Include="Common\ImportResult.h" />
     <ClInclude Include="Common\MeshAPI.h" />
