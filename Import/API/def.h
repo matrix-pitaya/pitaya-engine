@@ -1,8 +1,6 @@
 #pragma once
 
-// Import is a static library in the current build. Keep its public ABI
-// independent from Engine so the importer can later be reused by the editor
-// and cooker without pulling the runtime module boundary into the library.
+// Import 当前是静态库，不能依赖 Engine 的导出宏。
 #if defined(IMPORT_DLL_BUILD) && defined(IMPORT_EXPORT)
     #if defined(PITAYA_PLATFORM_WINDOWS)
         #define IMPORT_API __declspec(dllexport)

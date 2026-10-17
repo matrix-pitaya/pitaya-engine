@@ -28,17 +28,17 @@ namespace Pitaya::Core
             std::lock_guard<std::mutex> lock(mutex);
             queue.push(item);
         }
-		inline void Push(T&& item)
-		{
-			std::lock_guard<std::mutex> lock(mutex);
-			queue.push(std::move(item));
-		}
-		template<typename... Args>
-		inline void Emplace(Args&&... args)
-		{
-			std::lock_guard<std::mutex> lock(mutex);
-			queue.emplace(std::forward<Args>(args)...);
-		}
+        inline void Push(T&& item)
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            queue.push(std::move(item));
+        }
+        template<typename... Args>
+        inline void Emplace(Args&&... args)
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            queue.emplace(std::forward<Args>(args)...);
+        }
         inline bool Pop(T& outItem)
         {
             std::lock_guard<std::mutex> lock(mutex);

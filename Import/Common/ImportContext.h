@@ -7,9 +7,7 @@
 
 namespace Pitaya::Import
 {
-    // Importers must not depend on AssetHub or AssetDatabase directly. The
-    // coordinator above Import supplies these optional callbacks when an
-    // importer needs to resolve a generated dependency.
+    // Importer 不直接依赖 AssetHub，由上层通过上下文提供资产解析能力。
     struct ImportContext
     {
         using TransformToVirtualPathFn = bool(*)(
