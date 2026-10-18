@@ -7,6 +7,8 @@
 
 namespace Pitaya::Asset
 {
+    class AssetHub;
+
     class VirtualFileSystem final
     {
     public:
@@ -25,9 +27,13 @@ namespace Pitaya::Asset
             std::filesystem::path Root;
         };
 
-    public:
+    private:
+        friend class AssetHub;
+
         VirtualFileSystem() = default;
         ~VirtualFileSystem() = default;
+
+    public:
 
         VirtualFileSystem(const VirtualFileSystem&) = delete;
         VirtualFileSystem& operator=(const VirtualFileSystem&) = delete;
