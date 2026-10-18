@@ -122,7 +122,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.GUID = Pitaya::Asset::Texture::White;
         builtins.White.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         textures.Emplace(Pitaya::Asset::Texture::White, &builtins.White);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //Black Texture
@@ -142,7 +142,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.GUID = Pitaya::Asset::Texture::Black;
         builtins.Black.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         textures.Emplace(Pitaya::Asset::Texture::Black, &builtins.Black);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //FlatNormal Texture
@@ -162,7 +162,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.GUID = Pitaya::Asset::Texture::FlatNormal;
         builtins.FlatNormal.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         textures.Emplace(Pitaya::Asset::Texture::FlatNormal, &builtins.FlatNormal);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //PBR Static Shader
@@ -204,7 +204,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.GUID = Pitaya::Asset::Shader::PBRStatic;
         builtins.PBRStaticShader.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         shaders.Emplace(Pitaya::Asset::Shader::PBRStatic, &builtins.PBRStaticShader);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //PBR Skinned Shader
@@ -246,7 +246,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.GUID = Pitaya::Asset::Shader::PBRSkinned;
         builtins.PBRSkinnedShader.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         shaders.Emplace(Pitaya::Asset::Shader::PBRSkinned, &builtins.PBRSkinnedShader);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //PBR Material
@@ -352,7 +352,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
         builtins.Cube.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         meshes.Emplace(Pitaya::Asset::Mesh::Cube, &builtins.Cube);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //Panel Mesh
@@ -391,7 +391,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
         builtins.Panel.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         meshes.Emplace(Pitaya::Asset::Mesh::Panel, &builtins.Panel);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //Sphere Mesh
@@ -499,7 +499,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         // 提交到引擎系统
         builtins.Sphere.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         meshes.Emplace(Pitaya::Asset::Mesh::Sphere, &builtins.Sphere);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     //Default SkyBox
@@ -513,7 +513,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         Pitaya::Import::Import(Pitaya::Asset::SkyBox::Default, rc.data, rc.size, true, result);
         builtins.DefaultSkyBox.State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         skyboxes.Emplace(Pitaya::Asset::SkyBox::Default, &builtins.DefaultSkyBox);
-        cacheAssetOperateQueue.push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     } while (false);
 
     return true;
@@ -1422,7 +1422,7 @@ void Pitaya::Asset::AssetHub::LoadTextureAsset(Pitaya::Core::GUID guid, const st
         if (LoadTexture2DAsset(guid, path, cpuOpResult_Inner))
         {
             Pitaya::Log::Info(path.string() + "Load Success");
-            assetOperateQueue.Push({ cpuOpResult_Inner });
+            gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ cpuOpResult_Inner });
         }
         else
         {
@@ -1440,7 +1440,7 @@ void Pitaya::Asset::AssetHub::LoadTextureAsset(Pitaya::Core::GUID guid, const st
         {
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
             cpuOpResult_Out.Data = cpuOpResult_Inner;
-            assetOperateQueue.Push(std::move(cpuOpResult_Out));
+            gpuAssetBridge.Enqueue(std::move(cpuOpResult_Out));
         }
         else
         {
@@ -1602,7 +1602,7 @@ void Pitaya::Asset::AssetHub::LoadShaderAsset(Pitaya::Core::GUID guid, const std
         if (LoadVFShaderAsset(guid, folder, vertexPath, fragmentPath, cpuOpResult_Inner))
         {
             Pitaya::Log::Info(folder.string() + " load success, in shader VF");
-            assetOperateQueue.Push({ cpuOpResult_Inner });
+            gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ cpuOpResult_Inner });
         }
         else
         {
@@ -1619,7 +1619,7 @@ void Pitaya::Asset::AssetHub::LoadShaderAsset(Pitaya::Core::GUID guid, const std
             Pitaya::Log::Info(folder.string() + " load success");
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
             cpuOpResult_Out.Data = cpuOpResult_Inner;
-            assetOperateQueue.Push(std::move(cpuOpResult_Out));
+            gpuAssetBridge.Enqueue(std::move(cpuOpResult_Out));
         }
         else
         {
@@ -1774,7 +1774,7 @@ void Pitaya::Asset::AssetHub::LoadMeshAsset(Pitaya::Core::GUID guid, const std::
             Pitaya::Log::Info("static mesh asset load success in cpu");
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
             cpuOpResult_Out.Data = cpuOpResult_Inner;
-            assetOperateQueue.Push(std::move(cpuOpResult_Out));
+            gpuAssetBridge.Enqueue(std::move(cpuOpResult_Out));
         }
         else
         {
@@ -1962,7 +1962,7 @@ void Pitaya::Asset::AssetHub::LoadRenderTarget(Pitaya::Core::GUID guid, const st
     cpuOpResult_Inner.GUID = guid;
     Pitaya::Asset::AssetOperate cpuOpResult_Out;
     cpuOpResult_Out.Data = cpuOpResult_Inner;
-    assetOperateQueue.Push(std::move(cpuOpResult_Out));
+    gpuAssetBridge.Enqueue(std::move(cpuOpResult_Out));
 
     entry->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
 }
@@ -1982,7 +1982,7 @@ void Pitaya::Asset::AssetHub::LoadSkyBoxAsset(Pitaya::Core::GUID guid, const std
     if (Pitaya::Import::Import(guid, path, true, result))
     {
         entry->CompleteCpuLoad();
-        assetOperateQueue.Push({ result });
+        gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ result });
     }
     else
     {

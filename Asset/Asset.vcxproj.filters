@@ -62,6 +62,9 @@
     <ClInclude Include="Database\AssetDatabase.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="GpuAssetBridge\GpuAssetBridge.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h">
       <Filter>头文件</Filter>
     </ClInclude>

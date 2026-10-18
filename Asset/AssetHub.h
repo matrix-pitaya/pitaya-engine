@@ -1,10 +1,8 @@
 #pragma once
 
 #include<Core/Allocate/Allocate.h>
-#include<Core/Container/ThreadSafe/ThreadSafeQueue.h>
 #include<Core/Container/ThreadSafe/ThreadSafeHashMap.h>
 #include<Core/Asset/AssetRef.h>
-#include<Core/Utils/Time.h>
 
 #include<Asset/Common/FuncTable.h>
 #include<Asset/Database/AssetDatabase.h>
@@ -24,9 +22,8 @@
 #include<Asset/Common/AssetKey.h>
 #include<Asset/Common/AssetCatalog.h>
 #include<Asset/Common/SkyBox.h>
+#include<Asset/GpuAssetBridge/GpuAssetBridge.h>
 #include<Asset/VirtualFileSystem/VirtualFileSystem.h>
-
-#include<chrono>
 
 namespace Pitaya::Asset
 {
@@ -373,24 +370,18 @@ namespace Pitaya::Asset
     public:
         inline void CommitAssetOperate(const Pitaya::Asset::AssetOperate& operate)
         {
-            assetOperateQueue.Push(operate);
+            gpuAssetBridge.Enqueue(operate);
         }
 
     public:
-        inline void SyncAssetToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer>)
+        inline void SyncAssetToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer> passkey)
         {
-            // 每一帧最多处理5个资源操作 避免过多资源操作导致的卡顿
-            if (cacheAssetOperateQueue.empty()) { cacheAssetOperateQueue = assetOperateQueue.PopN(5); }
-
-            // 在时间预算内处理资产
-            Pitaya::Core::InvokeWithTimeBudget(
-                [this]() ->bool { return cacheAssetOperateQueue.empty(); },
-                [this]() { std::visit([this](auto& result_Inner) { this->SyncAssetOperate(result_Inner); }, cacheAssetOperateQueue.front().Data); cacheAssetOperateQueue.pop(); },
-                std::chrono::milliseconds(2));
+            gpuAssetBridge.Process(passkey,
+                [this](auto& result_Inner) { this->SyncAssetOperate(result_Inner); });
         }
-        inline bool IsUploadedToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer>)
+        inline bool IsUploadedToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer> passkey)
         {
-            return !cacheAssetOperateQueue.empty() || !assetOperateQueue.Empty();
+            return gpuAssetBridge.HasPending(passkey);
         }
 
     private:
@@ -423,9 +414,8 @@ namespace Pitaya::Asset
         Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
             Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry*> skyboxes;
 
-        //存储CPU操作资源结果（任务线程添加 → 渲染线程处理）
-        Pitaya::Core::ThreadSafeQueue<Pitaya::Asset::AssetOperate> assetOperateQueue;
-        std::queue<Pitaya::Asset::AssetOperate> cacheAssetOperateQueue;	//渲染线程处理资源操作时的临时队列 避免长时间占用锁
+        // CPU 线程提交，Renderer 线程消费；OpenGL 操作只在 GpuAssetBridge::Process 中执行。
+        Pitaya::Asset::GpuAssetBridge gpuAssetBridge;
 
         Pitaya::Asset::AssetDatabase database;
         Pitaya::Asset::AssetHub::BuiltinAssetStorage builtins;

@@ -180,6 +180,7 @@
     <ClInclude Include="Common\AssetKey.h" />
     <ClInclude Include="Common\AssetCatalog.h" />
     <ClInclude Include="Database\AssetDatabase.h" />
+    <ClInclude Include="GpuAssetBridge\GpuAssetBridge.h" />
     <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
