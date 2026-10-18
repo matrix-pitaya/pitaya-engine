@@ -4,7 +4,11 @@
 
 #include<Core/Container/ThreadSafe/ThreadSafeQueue.h>
 #include<Core/PassKey/PassKey.h>
+#include<Core/Utils/Check.h>
 #include<Core/Utils/Time.h>
+
+#include<Thread/Common/FuncTable.h>
+#include<Thread/Common/ThreadType.h>
 
 #include<chrono>
 #include<queue>
@@ -49,6 +53,7 @@ namespace Pitaya::Asset
         inline void Process(Pitaya::Core::PassKey<Pitaya::Render::Renderer> passkey, Handler&& handler)
         {
             (void)passkey;
+            PITAYA_CHECK(Pitaya::Thread::GetIsInThread(Pitaya::Thread::ThreadType::Render));
             if (renderOperations.empty()) { renderOperations = pendingOperations.PopN(5); }
 
             Pitaya::Core::InvokeWithTimeBudget(

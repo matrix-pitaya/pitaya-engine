@@ -372,6 +372,10 @@ namespace Pitaya::Asset
         {
             gpuAssetBridge.Enqueue(operate);
         }
+        inline void CommitAssetOperate(Pitaya::Asset::AssetOperate&& operate)
+        {
+            gpuAssetBridge.Enqueue(std::move(operate));
+        }
 
     public:
         inline void SyncAssetToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer> passkey)
