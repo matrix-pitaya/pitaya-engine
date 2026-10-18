@@ -1,29 +1,17 @@
 #pragma once
 
-#include<Asset/Common/AssetType.h>
+#include<Asset/Common/AssetKey.h>
 
 #include<Core/Container/ThreadSafe/ThreadSafeHashMap.h>
 #include<Core/Identifier/GUID.h>
 
-#include<cstdint>
 #include<string_view>
 
 namespace Pitaya::Asset
 {
-    enum class AssetTypeId : uint8_t
-    {
-        Texture,
-        Material,
-        Mesh,
-        Shader,
-        RenderTarget,
-        SkyBox,
-        Invalid
-    };
-
     struct BuiltinAssetInfo
     {
-        AssetTypeId Type = AssetTypeId::Invalid;
+        AssetKey Key;
         std::string_view Name;
     };
 
@@ -40,7 +28,7 @@ namespace Pitaya::Asset
         template<AssetType T>
         inline void Register(Pitaya::Core::GUID guid, std::string_view name)
         {
-            entries.InsertOrAssign(guid, BuiltinAssetInfo{ AssetTraits<T>::Type, name });
+            entries.InsertOrAssign(guid, BuiltinAssetInfo{ AssetKey{ guid, AssetTraits<T>::Type }, name });
         }
 
         inline bool Find(Pitaya::Core::GUID guid, BuiltinAssetInfo& out) const
@@ -60,7 +48,7 @@ namespace Pitaya::Asset
         inline bool Matches(Pitaya::Core::GUID guid) const
         {
             BuiltinAssetInfo info;
-            return Find(guid, info) && info.Type == AssetTraits<T>::Type;
+            return Find(guid, info) && info.Key.Type == AssetTraits<T>::Type;
         }
 
     private:

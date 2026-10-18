@@ -22,6 +22,7 @@
 #include<Asset/Common/Shader.h>
 #include<Asset/Common/Texture.h>
 #include<Asset/Common/AssetType.h>
+#include<Asset/Common/AssetKey.h>
 #include<Asset/Common/AssetCatalog.h>
 #include<Asset/Common/SkyBox.h>
 
@@ -102,7 +103,7 @@ namespace Pitaya::Asset
             Pitaya::Asset::BuiltinAssetInfo builtinInfo;
             if (builtinCatalog.Find(guid, builtinInfo))
             {
-                if (builtinInfo.Type != Pitaya::Asset::AssetTraits<T>::Type)
+                if (builtinInfo.Key.Type != Pitaya::Asset::AssetTraits<T>::Type)
                 {
                     Pitaya::Log::Error("asset type mismatch for builtin GUID:" + guid.ToString());
                     return nullptr;

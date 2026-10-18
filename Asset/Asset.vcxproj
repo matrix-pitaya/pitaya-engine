@@ -175,6 +175,7 @@
     <ClInclude Include="Common\MaterialParamLayout.h" />
     <ClInclude Include="Common\TextureUsage.h" />
     <ClInclude Include="Common\AssetType.h" />
+    <ClInclude Include="Common\AssetKey.h" />
     <ClInclude Include="Common\AssetCatalog.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
