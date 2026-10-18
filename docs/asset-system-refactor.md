@@ -152,6 +152,8 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 ### 阶段二：拆 AssetDatabase 和 VirtualFileSystem
 
 - 将 `AssetHub::AssetRegistry`、虚拟路径转换、路径解析和外部文件注册移动到 `AssetDatabase`。
+- 当前已完成第一步：`AssetDatabase` 同时维护旧 GUID↔虚拟路径索引和 `AssetKey`/`AssetRecord` 索引，旧 `asset.cfg` 中的 `path` 字段仍可读取。
+- `AssetHub::GetAssetPathByGUID`、`GetAssetGUIDByPath`、`RegisterExternalFile` 和初始化/保存流程已经通过 `AssetDatabase` 转发，调用方 API 保持不变。
 - 将 `engine:/`、`project:/`、`cache:/` 和 `cook:/` mount 统一放进 VirtualFileSystem。
 - 将 `asset.cfg` 升级为带版本号的 Catalog。
 
@@ -168,6 +170,19 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 - Renderer 只负责消费 GPU 上传队列。
 - 删除 AssetHub 对 `PassKey<Renderer>` 的直接依赖。
 - 增加 GPU fence 和延迟销毁。
+
+OpenGL 的限制决定了这一步必须保留明确的线程边界：导入任务和 CPU 资源解析可以在线程池执行，但 OpenGL 对象的创建、更新和销毁只能由拥有当前 GL context 的渲染线程执行。目标流程是：
+
+```text
+工作线程: 读取源文件 -> Import -> CPU 结果 + AssetKey/generation
+              |
+              v
+AssetOperate 队列（只传递 CPU 数据和 GPU 命令参数）
+              |
+渲染线程: GpuAssetBridge -> OpenGL buffer/texture/program 创建或销毁
+```
+
+`GpuAssetBridge` 不负责找文件或解析导入格式，只把已经完成 CPU 阶段的结果转换成渲染线程可执行的 OpenGL 操作，并在操作完成后更新资源状态。这样不会把 OpenGL context 带进导入线程，也不会让 AssetDatabase 依赖 GPU 后端。
 
 ### 阶段五：Cook 和编辑器工具
 

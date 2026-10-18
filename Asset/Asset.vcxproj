@@ -161,6 +161,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AssetHub.cpp" />
+    <ClCompile Include="Database\AssetDatabase.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\FuncTable.h" />
@@ -177,6 +178,7 @@
     <ClInclude Include="Common\AssetType.h" />
     <ClInclude Include="Common\AssetKey.h" />
     <ClInclude Include="Common\AssetCatalog.h" />
+    <ClInclude Include="Database\AssetDatabase.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

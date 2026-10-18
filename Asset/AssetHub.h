@@ -3,12 +3,11 @@
 #include<Core/Allocate/Allocate.h>
 #include<Core/Container/ThreadSafe/ThreadSafeQueue.h>
 #include<Core/Container/ThreadSafe/ThreadSafeHashMap.h>
-#include<Core/Container/ThreadSafe/ThreadSafeBidirectionalMap.h>
 #include<Core/Asset/AssetRef.h>
 #include<Core/Utils/Time.h>
 
-#include<Serialize/Serializable.h>
 #include<Asset/Common/FuncTable.h>
+#include<Asset/Database/AssetDatabase.h>
 #include<Log/Common/FuncTable.h>
 #include<Task/Common/FuncTable.h>
 #include<GPU/Common/ShaderType.h>
@@ -61,13 +60,6 @@ namespace Pitaya::Asset
         };
 
     private:
-        struct AssetRegistry : public Pitaya::Serialize::Serializable
-        {
-            void Serialize(Pitaya::Serialize::SerializeContext&) const override;
-            void Deserialize(const Pitaya::Serialize::DeserializeContext&) override;
-
-            Pitaya::Core::ThreadSafeBidirectionalMap<Pitaya::Core::GUID, std::filesystem::path> Map;
-        };
         struct BuiltinAssetStorage
         {
             Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry White;
@@ -115,6 +107,11 @@ namespace Pitaya::Asset
             if (!GetAssetPathByGUID(guid, path))
             {
                 Pitaya::Log::Error(guid.ToString() + " asset cant find path");
+                return nullptr;
+            }
+            if (!database.RegisterAssetType(guid, Pitaya::Asset::AssetTraits<T>::Type))
+            {
+                Pitaya::Log::Error("asset type mismatch for GUID:" + guid.ToString());
                 return nullptr;
             }
             return LoadAsset<T>(guid, path);
@@ -293,17 +290,8 @@ namespace Pitaya::Asset
         inline bool GetAssetPathByGUID(Pitaya::Core::GUID guid, std::filesystem::path& out_path)
         {
             std::string log;
-            bool success = false;
-            registry.Map.FindOperateKV(guid,
-                [&success, &out_path](Pitaya::Core::GUID _guid, const std::filesystem::path& _path)
-                {
-                    out_path = _path;
-                    success = true;
-                },
-                [&log](Pitaya::Core::GUID _guid)
-                {
-                    log = "find path fail, GUID:" + _guid.ToString();
-                });
+            const bool success = database.GetAssetPathByGUID(guid, out_path);
+            if (!success) { log = "find path fail, GUID:" + guid.ToString(); }
             if (!log.empty()) { Pitaya::Log::Error(log); }
             return success;
         }
@@ -316,17 +304,8 @@ namespace Pitaya::Asset
             }
 
             std::string log;
-            bool success = false;
-            registry.Map.FindOperateKV(path,
-                [&success, &out_guid](const std::filesystem::path& _path, Pitaya::Core::GUID _guid)
-                {
-                    out_guid = _guid;
-                    success = true;
-                },
-                [&log](const std::filesystem::path& _path)
-                {
-                    log = "find guid fail, path:" + _path.string();
-                });
+            const bool success = database.GetAssetGUIDByPath(path, out_guid);
+            if (!success) { log = "find guid fail, path:" + path.string(); }
             if (!log.empty()) { Pitaya::Log::Error(log); }
             return success;
         }
@@ -457,7 +436,7 @@ namespace Pitaya::Asset
         Pitaya::Core::ThreadSafeQueue<Pitaya::Asset::AssetOperate> assetOperateQueue;
         std::queue<Pitaya::Asset::AssetOperate> cacheAssetOperateQueue;	//渲染线程处理资源操作时的临时队列 避免长时间占用锁
 
-        Pitaya::Asset::AssetHub::AssetRegistry registry;
+        Pitaya::Asset::AssetDatabase database;
         Pitaya::Asset::AssetHub::BuiltinAssetStorage builtins;
         Pitaya::Asset::BuiltinAssetCatalog builtinCatalog;
     };

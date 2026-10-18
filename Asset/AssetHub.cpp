@@ -94,9 +94,10 @@ bool Pitaya::Asset::AssetHub::Initialize()
     engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
     projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
     const std::filesystem::path registryFile = projectRoot / fileName;
-    if (std::filesystem::exists(registryFile))
+    if (!database.Initialize(registryFile))
     {
-        registry.DeserializeFromFile(registryFile);
+        Pitaya::Log::Error("asset database could not be initialized, path:" + registryFile.string());
+        return false;
     }
 
     //White Texture
@@ -625,7 +626,10 @@ void Pitaya::Asset::AssetHub::Release()
     Pitaya::Core::Delete(builtins.Panel.Data.load(std::memory_order_acquire)); builtins.Panel.Data.store(nullptr, std::memory_order_release);
     Pitaya::Core::Delete(builtins.DefaultSkyBox.Data.load(std::memory_order_acquire)); builtins.DefaultSkyBox.Data.store(nullptr, std::memory_order_release);
 
-    registry.SerializeToFile(projectRoot / fileName);
+    if (!database.Save())
+    {
+        Pitaya::Log::Warning("asset database could not be saved, path:" + (projectRoot / fileName).string());
+    }
 }
 
 void Pitaya::Asset::AssetHub::SyncAssetOperate(std::monostate&)
@@ -1164,26 +1168,19 @@ bool Pitaya::Asset::AssetHub::RegisterExternalFile(const std::filesystem::path& 
     }
 
     //如果已经包含该路径
-    bool hasRegisted = false;
-    registry.Map.FindOperateKV(out_virtualpath,
-        [&hasRegisted, &out_guid](const std::filesystem::path& _path, Pitaya::Core::GUID _guid)
-        {
-            hasRegisted = true;
-            out_guid = _guid;
-        },
-        [](const std::filesystem::path& _path)
-        {
-
-        });
-    if (hasRegisted)
+    if (GetAssetGUIDByPath(out_virtualpath, out_guid))
     {
         Pitaya::Log::Info("erternal asset has registerd, path:" + inputPath.string());
         return true;
     }
 
     out_guid = Pitaya::Core::GUID::New();
-    registry.Map.Insert(out_guid, out_virtualpath);
-    if (!registry.SerializeToFile(projectRoot / fileName))
+    if (!database.RegisterAssetPath(out_guid, out_virtualpath))
+    {
+        Pitaya::Log::Error("asset database could not register path:" + out_virtualpath.string());
+        return false;
+    }
+    if (!database.Save())
     {
         Pitaya::Log::Warning("asset registry could not be saved, path:" + (projectRoot / fileName).string());
     }
@@ -1239,7 +1236,20 @@ bool Pitaya::Asset::AssetHub::RegisterGeneratedMaterial(
     }
 
     std::filesystem::path virtualMaterialPath;
-    return RegisterExternalFile(materialPath, modelDirectory, virtualMaterialPath, out_guid);
+    if (!RegisterExternalFile(materialPath, modelDirectory, virtualMaterialPath, out_guid))
+    {
+        return false;
+    }
+
+    Pitaya::Asset::AssetRecord materialRecord;
+    if (database.FindByGUID(out_guid, materialRecord))
+    {
+        materialRecord.Key.Type = Pitaya::Asset::AssetTypeId::Material;
+        materialRecord.Origin = Pitaya::Asset::AssetOrigin::Generated;
+        database.RegisterAsset(materialRecord);
+        database.Save();
+    }
+    return true;
 }
 
 //Pitaya::Asset::AssetType Pitaya::Asset::AssetHub::GetAssetType(const std::filesystem::path& path) const
@@ -2006,26 +2016,4 @@ void Pitaya::Asset::AssetHub::LoadSkyBoxAsset(Pitaya::Core::GUID guid, const std
     }
 }
 
-void Pitaya::Asset::AssetHub::AssetRegistry::Serialize(Pitaya::Serialize::SerializeContext& context) const
-{
-    for (const auto& [guid, path] : Map.GetAllKeyValuePairs())
-    {
-        auto& entry = context.GetSubContext(guid.ToString());
-        entry.Write("path", path.generic_string());
-    }
-}
-void Pitaya::Asset::AssetHub::AssetRegistry::Deserialize(const Pitaya::Serialize::DeserializeContext& context)
-{
-    Map.Clear();
-    for (const auto& key : context.GetAllSubKeys())
-    {
-        Pitaya::Core::GUID guid(key);
-        if (!guid) { continue; }
-
-        const auto& entry = context.GetSubContext(key);
-        std::string path;
-        if (!entry.Read("path", path) || path.empty()) { continue; }
-        Map.Insert(guid, std::filesystem::path(path));
-    }
-}
 //ENDTODO
