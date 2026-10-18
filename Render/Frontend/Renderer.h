@@ -702,6 +702,16 @@ namespace Pitaya::Render
         Renderer(Renderer&&) = delete;
         Renderer& operator=(Renderer&&) = delete;
 
+    public:
+        inline void WakeupAssetUpload() noexcept
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                assetUploadWakeRequested = true;
+            }
+            cond.notify_one();
+        }
+
     private:
         inline bool Initialize(void* nativeWindow)
         {
@@ -745,9 +755,11 @@ namespace Pitaya::Render
             while (true)
             {
                 std::unique_lock<std::mutex> lock(mutex);
-                cond.wait(lock, [this] { return renderPacket.IsRemain() || INVOKE_SHOULDWAKEUPRENDERTHREAD_HOOK ||
+                cond.wait(lock, [this] { return renderPacket.IsRemain() || assetUploadWakeRequested || INVOKE_SHOULDWAKEUPRENDERTHREAD_HOOK ||
                     Pitaya::Asset::IsUploadedToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer>()) || !isRunning.load(std::memory_order_acquire); });
                 if (!isRunning.load(std::memory_order_acquire)) { break; }
+
+                assetUploadWakeRequested = false;
 
                 Pitaya::Asset::SyncAssetToGPU(Pitaya::Core::PassKey<Pitaya::Render::Renderer>());
                 if (renderPacket.IsRemain() || INVOKE_SHOULDWAKEUPRENDERTHREAD_HOOK)
@@ -1172,6 +1184,7 @@ namespace Pitaya::Render
     private:
         std::mutex mutex;
         std::condition_variable cond;
+        bool assetUploadWakeRequested = false;
         std::atomic<bool> isRunning = false;
         Pitaya::Core::Thread::Identifier renderThread;
         Pitaya::Core::Storage<8> backendStorage;

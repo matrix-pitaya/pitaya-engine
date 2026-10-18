@@ -374,6 +374,10 @@ namespace
     {
         return Pitaya::Engine::Context::Instance().GetModule<Pitaya::Render::Renderer>()->Bake(input);
     }
+    void ENGINE_CALL OnWakeupAssetUpload() noexcept
+    {
+        Pitaya::Engine::Context::Instance().GetModule<Pitaya::Render::Renderer>()->WakeupAssetUpload();
+    }
 #pragma endregion
 }
 
@@ -570,6 +574,7 @@ bool Pitaya::Engine::Engine::Initialize()
 
 #pragma region Render
         FUNCTABLE(Renderer).OnBakeIBL = OnBakeIBL;
+        FUNCTABLE(Renderer).OnWakeupAssetUpload = OnWakeupAssetUpload;
 #pragma endregion
     } while (false);
 

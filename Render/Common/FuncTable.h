@@ -25,11 +25,13 @@ namespace Pitaya::Engine
 		inline bool Verify() const
 		{
 			if (!OnBakeIBL) { throw std::runtime_error("FuncTable miss [Render::OnBakeIBL] Function!"); }
+			if (!OnWakeupAssetUpload) { throw std::runtime_error("FuncTable miss [Render::OnWakeupAssetUpload] Function!"); }
 				return true;
 		}
 		inline void Nullify() noexcept
 		{
 			OnBakeIBL = nullptr;
+			OnWakeupAssetUpload = nullptr;
 		}
 
 	public:
@@ -37,9 +39,14 @@ namespace Pitaya::Engine
 		{
 			return OnBakeIBL(input);
 		}
+		inline void InvokeOnWakeupAssetUpload() noexcept
+		{
+			OnWakeupAssetUpload();
+		}
 
 	private:
 		bool (ENGINE_CALL *OnBakeIBL)(const Pitaya::Render::IBLBakeInput&) = nullptr;
+		void (ENGINE_CALL *OnWakeupAssetUpload)() noexcept = nullptr;
 	};
 }
 
@@ -48,5 +55,9 @@ namespace Pitaya::Render
 	inline bool BakeIBL(const IBLBakeInput& input)
 	{
 		return Pitaya::Engine::Context::Instance().GetFuncTable<Pitaya::Render::Renderer>().InvokeOnBakeIBL(input);
+	}
+	inline void WakeupAssetUpload() noexcept
+	{
+		Pitaya::Engine::Context::Instance().GetFuncTable<Pitaya::Render::Renderer>().InvokeOnWakeupAssetUpload();
 	}
 }

@@ -1,5 +1,10 @@
 #pragma once
 
+namespace Pitaya::Render
+{
+    class Renderer;
+}
+
 #include<Asset/Common/AssetOperate.h>
 
 #include<Core/Container/ThreadSafe/ThreadSafeQueue.h>
@@ -10,15 +15,12 @@
 #include<Thread/Common/FuncTable.h>
 #include<Thread/Common/ThreadType.h>
 
+#include<Render/Common/FuncTable.h>
+
 #include<chrono>
 #include<queue>
 #include<utility>
 #include<variant>
-
-namespace Pitaya::Render
-{
-    class Renderer;
-}
 
 namespace Pitaya::Asset
 {
@@ -42,11 +44,13 @@ namespace Pitaya::Asset
         inline void Enqueue(const Pitaya::Asset::AssetOperate& operate)
         {
             pendingOperations.Push(operate);
+            Pitaya::Render::WakeupAssetUpload();
         }
 
         inline void Enqueue(Pitaya::Asset::AssetOperate&& operate)
         {
             pendingOperations.Push(std::move(operate));
+            Pitaya::Render::WakeupAssetUpload();
         }
 
         template<typename Handler>
