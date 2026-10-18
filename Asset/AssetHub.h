@@ -24,6 +24,7 @@
 #include<Asset/Common/AssetKey.h>
 #include<Asset/Common/AssetCatalog.h>
 #include<Asset/Common/SkyBox.h>
+#include<Asset/VirtualFileSystem/VirtualFileSystem.h>
 
 #include<chrono>
 
@@ -313,24 +314,15 @@ namespace Pitaya::Asset
     private:
         inline std::filesystem::path GetResolvePath(const std::filesystem::path& virtualPath) const
         {
-            std::string virtualPathStr = virtualPath.string();
-            if (virtualPathStr.starts_with("engine:/"))
-            {
-                return engineRoot / virtualPathStr.substr(8);
-            }
-
-            if (virtualPathStr.starts_with("project:/"))
-            {
-                return projectRoot / virtualPathStr.substr(9);
-            }
-
-            return projectRoot / virtualPath;
+            std::filesystem::path physicalPath;
+            virtualFileSystem.Resolve(virtualPath, physicalPath);
+            return physicalPath;
         }
 
     private:
         inline bool IsEngineAssetPath(const std::filesystem::path& virtualPath)
         {
-            return virtualPath.string().starts_with("engine:/");
+            return virtualFileSystem.IsEnginePath(virtualPath);
         }
 
     //private:
@@ -416,8 +408,7 @@ namespace Pitaya::Asset
         inline static constexpr const char* fileName = "asset.cfg";
 
     private:
-        std::filesystem::path engineRoot;
-        std::filesystem::path projectRoot;
+        Pitaya::Asset::VirtualFileSystem virtualFileSystem;
         
         Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
             Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry*> meshes;
@@ -442,7 +433,7 @@ namespace Pitaya::Asset
     };
 }
 
-// TODO 重构一下AssetHub 抽象出VirtualFileSystem , 现在AssetHub耦合性太高了
+// AssetHub 保留资源生命周期和导入 facade，虚拟路径职责由 VirtualFileSystem 处理。
 
 /*
 bool CanUnloadAsset(AssetEntry* entry) {

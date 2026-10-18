@@ -91,8 +91,13 @@ void Pitaya::Asset::AssetHub::RegisterBuiltinAssets()
 bool Pitaya::Asset::AssetHub::Initialize()
 {
     RegisterBuiltinAssets();
-    engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
-    projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
+    const std::filesystem::path engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
+    const std::filesystem::path projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
+    if (!virtualFileSystem.Initialize(engineRoot, projectRoot))
+    {
+        Pitaya::Log::Error("asset virtual file system could not be initialized");
+        return false;
+    }
     const std::filesystem::path registryFile = projectRoot / fileName;
     if (!database.Initialize(registryFile))
     {
@@ -628,7 +633,8 @@ void Pitaya::Asset::AssetHub::Release()
 
     if (!database.Save())
     {
-        Pitaya::Log::Warning("asset database could not be saved, path:" + (projectRoot / fileName).string());
+        Pitaya::Log::Warning("asset database could not be saved, path:"
+            + (virtualFileSystem.GetRoot(Pitaya::Asset::VirtualFileSystem::MountId::Project) / fileName).string());
     }
 }
 
@@ -1116,40 +1122,9 @@ void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::SkyBoxImportResul
 // TODO 重构
 bool Pitaya::Asset::AssetHub::TransformToVirtualPath(const std::filesystem::path& inputPath, const std::filesystem::path& basePath, std::filesystem::path& out_virtualpath) const
 {
-    std::filesystem::path absolutePath = inputPath.is_absolute() ? inputPath : basePath / inputPath;
-    try
-    {
-        absolutePath = std::filesystem::canonical(absolutePath);
-    }
-    catch (...)
-    {
-        try
-        {
-            absolutePath = std::filesystem::weakly_canonical(absolutePath);
-        }
-        catch (...)
-        {
-            absolutePath = std::filesystem::absolute(absolutePath);
-        }
-    }
+    if (virtualFileSystem.ToVirtualPath(inputPath, basePath, out_virtualpath)) { return true; }
 
-    //如果是引擎内置资源
-    if (Pitaya::Core::IsSubPath(absolutePath, engineRoot))
-    {
-        std::filesystem::path relative = std::filesystem::relative(absolutePath, engineRoot);
-        out_virtualpath = "engine:/" + relative.generic_string();
-        return true;
-    }
-
-    //如果是项目资源
-    if (Pitaya::Core::IsSubPath(absolutePath, projectRoot))
-    {
-        std::filesystem::path relative = std::filesystem::relative(absolutePath, projectRoot);
-        out_virtualpath = "project:/" + relative.generic_string();
-        return true;
-    }
-
-    Pitaya::Log::Error("transform absolute to virtual path fail, absolute not engine or project, path:" + absolutePath.string());
+    Pitaya::Log::Error("transform absolute to virtual path fail, absolute not engine or project, path:" + inputPath.string());
     return false;
 }
 bool Pitaya::Asset::AssetHub::RegisterExternalFile(const std::filesystem::path& inputPath, const std::filesystem::path& basePath, std::filesystem::path& out_virtualpath, Pitaya::Core::GUID& out_guid)
@@ -1182,7 +1157,8 @@ bool Pitaya::Asset::AssetHub::RegisterExternalFile(const std::filesystem::path& 
     }
     if (!database.Save())
     {
-        Pitaya::Log::Warning("asset registry could not be saved, path:" + (projectRoot / fileName).string());
+        Pitaya::Log::Warning("asset registry could not be saved, path:"
+            + (virtualFileSystem.GetRoot(Pitaya::Asset::VirtualFileSystem::MountId::Project) / fileName).string());
     }
     return true;
 }
@@ -1294,8 +1270,7 @@ bool Pitaya::Asset::AssetHub::RegisterGeneratedMaterial(
 
 bool Pitaya::Asset::AssetHub::CheckIsVirtualPath(const std::filesystem::path& path) const
 {
-    std::string pathstr = path.string();
-    return pathstr.starts_with("engine:/") || pathstr.starts_with("project:/");
+    return virtualFileSystem.IsVirtualPath(path);
 }
 bool Pitaya::Asset::AssetHub::CheckAssetValid(const std::filesystem::path& path) const
 {

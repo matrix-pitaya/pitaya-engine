@@ -162,6 +162,7 @@
   <ItemGroup>
     <ClCompile Include="AssetHub.cpp" />
     <ClCompile Include="Database\AssetDatabase.cpp" />
+    <ClCompile Include="VirtualFileSystem\VirtualFileSystem.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\FuncTable.h" />
@@ -179,6 +180,7 @@
     <ClInclude Include="Common\AssetKey.h" />
     <ClInclude Include="Common\AssetCatalog.h" />
     <ClInclude Include="Database\AssetDatabase.h" />
+    <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

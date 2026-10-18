@@ -154,7 +154,8 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 - 将 `AssetHub::AssetRegistry`、虚拟路径转换、路径解析和外部文件注册移动到 `AssetDatabase`。
 - 当前已完成第一步：`AssetDatabase` 同时维护旧 GUID↔虚拟路径索引和 `AssetKey`/`AssetRecord` 索引，旧 `asset.cfg` 中的 `path` 字段仍可读取。
 - `AssetHub::GetAssetPathByGUID`、`GetAssetGUIDByPath`、`RegisterExternalFile` 和初始化/保存流程已经通过 `AssetDatabase` 转发，调用方 API 保持不变。
-- 将 `engine:/`、`project:/`、`cache:/` 和 `cook:/` mount 统一放进 VirtualFileSystem。
+- `VirtualFileSystem` 已从 `AssetHub` 抽出路径职责，统一处理 `engine:/`、`project:/`、`cache:/` 和 `cook:/` mount；当前只初始化 engine/project，cache/cook 为后续 Cooker 保留。
+- `AssetHub` 仍保留原来的 `TransformToVirtualPath`、`GetResolvePath` 和 `CheckIsVirtualPath` facade，内部全部委托给 `VirtualFileSystem`。
 - 将 `asset.cfg` 升级为带版本号的 Catalog。
 
 ### 阶段三：拆 ImportPipeline 和 RuntimeAssetManager

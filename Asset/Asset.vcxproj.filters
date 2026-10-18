@@ -21,6 +21,9 @@
     <ClCompile Include="Database\AssetDatabase.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="VirtualFileSystem\VirtualFileSystem.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\Material.h">
@@ -57,6 +60,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Database\AssetDatabase.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="AssetHub.h">
