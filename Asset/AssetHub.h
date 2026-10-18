@@ -154,6 +154,9 @@ namespace Pitaya::Asset
         }
 
     private:
+        static Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* FindTextureEntryCallback(
+            void* userData, Pitaya::Core::GUID guid);
+
         template<AssetType T>
         inline Pitaya::Core::AssetRef<T> FindAssetEntry(Pitaya::Core::GUID guid)
         {
@@ -390,13 +393,10 @@ namespace Pitaya::Asset
 
     private:
         void SyncAssetOperate(std::monostate&);
-        void SyncAssetOperate(Pitaya::Import::Texture2DImportResult&);
-        void SyncAssetOperate(Pitaya::Import::TextureCubemapImportResult&);
         void SyncAssetOperate(Pitaya::Import::ShaderImportResult&);
         void SyncAssetOperate(Pitaya::Import::StaticMeshImportResult&);
         void SyncAssetOperate(Pitaya::Import::SkinnedMeshImportResult&);
         void SyncAssetOperate(Pitaya::Import::RenderTargetImportResult&);
-        void SyncAssetOperate(Pitaya::Asset::Texture2DUnloadRequire&);
         void SyncAssetOperate(Pitaya::Import::SkyBoxImportResult&);
 
     private:

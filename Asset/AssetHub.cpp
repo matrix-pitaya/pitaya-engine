@@ -62,6 +62,22 @@ namespace
     }
 }
 
+Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry*
+Pitaya::Asset::AssetHub::FindTextureEntryCallback(void* userData, Pitaya::Core::GUID guid)
+{
+    auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+    if (!assetHub) { return nullptr; }
+
+    Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* entry = nullptr;
+    assetHub->textures.FindOperateKV(guid,
+        [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* value)
+        {
+            entry = value;
+        },
+        [](Pitaya::Core::GUID) {});
+    return entry;
+}
+
 Pitaya::Import::ImportContext Pitaya::Asset::AssetHub::GetImportContext() noexcept
 {
     return Pitaya::Import::ImportContext{
@@ -91,6 +107,7 @@ void Pitaya::Asset::AssetHub::RegisterBuiltinAssets()
 bool Pitaya::Asset::AssetHub::Initialize()
 {
     RegisterBuiltinAssets();
+    gpuAssetBridge.SetTextureCallbacks(this, &Pitaya::Asset::AssetHub::FindTextureEntryCallback);
     const std::filesystem::path engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
     const std::filesystem::path projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
     if (!virtualFileSystem.Initialize(engineRoot, projectRoot))
@@ -642,112 +659,6 @@ void Pitaya::Asset::AssetHub::SyncAssetOperate(std::monostate&)
 {
     Pitaya::Log::Error("unknown cpu operate result");
 }
-void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::Texture2DImportResult& cpuOpResult_Inner)
-{
-    char log[1024] = {};
-    Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* entry = nullptr;
-    textures.FindOperateKV(cpuOpResult_Inner.GUID,
-        [&](Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* _entry)
-        {
-            if (!_entry) { std::format_to_n(log, sizeof(log), "Texture AssetEntry Is Empty when GPU Process CPU Texture2D Load Result GUID: {}", _guid); return; }
-            if (_entry->State.HasBits(Pitaya::Core::AssetState::Unload)) { std::format_to_n(log, sizeof(log), "Texture asset marked as Unload, abort GPU load GUID: {}", _guid); return; }
-            _entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
-            entry = _entry;
-        },
-        [&](Core::GUID _guid)
-        {
-            std::format_to_n(log, sizeof(log), "Texture AssetEntry not found when GPU Process CPU Texture2D Load Result GUID: {}", _guid);
-        });
-    if (log[0] != '\0') { Pitaya::Log::Error(log); }
-    if (!entry) { return; }
-
-    auto* texture2D = entry->Data.load(std::memory_order_acquire);
-    if (!texture2D)
-    {
-        Pitaya::Log::Error("texture2D asset entry data is Empty! GUID: {}", cpuOpResult_Inner.GUID);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    const Pitaya::GPU::PixelFormat texturePixelFormat = Pitaya::Asset::TextureUsageToPixelFormat(cpuOpResult_Inner.Usage);
-    auto texture2DHandle = Pitaya::GPU::CreateTexture2D(cpuOpResult_Inner.Data.data(), cpuOpResult_Inner.Width, cpuOpResult_Inner.Height, texturePixelFormat, cpuOpResult_Inner.IsGenerateMipmap, cpuOpResult_Inner.isNearest);
-    if (!texture2DHandle)
-    {
-        Pitaya::Log::Error("texture2D asset create fail! GUID: {}", cpuOpResult_Inner.GUID);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        Pitaya::Log::Error("Texture2D asset marked as Unload, abort GPU load GUID:{}", cpuOpResult_Inner.GUID);
-        if (!Pitaya::GPU::DestroyTexture2D(texture2DHandle)) { Pitaya::Log::Error("destroy texture2D asset gail GUID: {}", cpuOpResult_Inner.GUID); }
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    texture2D->Texture2DHandle = texture2DHandle;
-    texture2D->Type = Pitaya::GPU::TextureType::Texture2D;
-    texture2D->Usage = cpuOpResult_Inner.Usage;
-    Pitaya::Log::Info("successfully created GPU resources for texture2D GUID: {}", cpuOpResult_Inner.GUID);
-    entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
-}
-void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::TextureCubemapImportResult& cpuOpResult_Inner)
-{
-    char log[1024]{};
-    Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* entry = nullptr;
-    textures.FindOperateKV(cpuOpResult_Inner.GUID,
-        [&](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* _entry)
-        {
-            if (!_entry) { std::format_to_n(log, sizeof(log), "texture asset entry is empty when GPU process CPU texture cubemap load result GUID: {}", _guid); return; }
-            if (_entry->State.HasBits(Pitaya::Core::AssetState::Unload)) { std::format_to_n(log, sizeof(log), "texture asset marked as Unload, abort GPU load GUID:{}", _guid); return;}
-            _entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
-            entry = _entry;
-        },
-        [&](Pitaya::Core::GUID _guid)
-        {
-            std::format_to_n(log, sizeof(log), "texture cubemap asset entry not found when GPU process CPU texture cubemap load result GUID: {}", _guid);
-        });
-    if (log[0] != '\0') { Pitaya::Log::Error(log); }
-    if (!entry) { return; }
-
-    auto* textureCubemap = entry->Data.load(std::memory_order_acquire);
-    if (!textureCubemap)
-    {
-        Pitaya::Log::Error("texture cubemap asset entry data is Empty! GUID: {}", cpuOpResult_Inner.GUID);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    const void* datas[6] = {};
-    for (uint32_t i = 0; i < 6; i++)
-    {
-        datas[i] = cpuOpResult_Inner.Data[i].data();
-    }
-    const Pitaya::GPU::PixelFormat cubemapPixelFormat = Pitaya::Asset::TextureUsageToPixelFormat(cpuOpResult_Inner.Usage);
-    auto textureCubemapHandle = Pitaya::GPU::CreateTextureCubemap(datas, cpuOpResult_Inner.Width, cpuOpResult_Inner.Height, cubemapPixelFormat, cpuOpResult_Inner.IsGenerateMipmap, cpuOpResult_Inner.isNearest);
-    if (!textureCubemapHandle)
-    {
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        Pitaya::Log::Error("texture cubemap asset marked as Unload, abort GPU load GUID:{}", cpuOpResult_Inner.GUID);
-        if (!Pitaya::GPU::DestroyTextureCubemap(textureCubemapHandle))
-        {
-            Pitaya::Log::Error("destroy texture cubemap asset fail, GUID:{}", cpuOpResult_Inner.GUID);
-        }
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    textureCubemap->TextureCubemapHandle = textureCubemapHandle;
-    textureCubemap->Type = Pitaya::GPU::TextureType::TextureCubemap;
-    textureCubemap->Usage = cpuOpResult_Inner.Usage;
-    entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
-}
 void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::ShaderImportResult& cpuOpResult_Inner)
 {
     char log[1024] = {};
@@ -1073,10 +984,6 @@ void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::RenderTargetImpor
 
     Pitaya::Log::Info("successfully created GPU resources for framebuffer GUID: " + cpuOpResult_Inner.GUID.ToString());
     entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
-}
-void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Asset::Texture2DUnloadRequire& cpuOpResult_Inner)
-{
-    Pitaya::GPU::DestroyTexture2D(cpuOpResult_Inner.Texture2DHandle);
 }
 void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::SkyBoxImportResult& cpuOpResult_Inner)
 {
