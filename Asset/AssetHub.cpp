@@ -605,7 +605,6 @@ bool Pitaya::Asset::AssetHub::Initialize()
 }
 void Pitaya::Asset::AssetHub::Release()
 {
-    // TODO 重构
     //从资源池移除内置资源
     shaders.Erase(Pitaya::Asset::Shader::PBRStatic);
     shaders.Erase(Pitaya::Asset::Shader::PBRSkinned);
@@ -618,103 +617,76 @@ void Pitaya::Asset::AssetHub::Release()
     meshes.Erase(Pitaya::Asset::Mesh::Panel);
     skyboxes.Erase(Pitaya::Asset::SkyBox::Default);
 
-    //清理资源池资源
-    meshes.ForEachCheckErase(
-        [](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry*& _entry)
-        {
-            if (_entry)
-            {
-                //清除Entry内部data数据
-                Pitaya::Core::Delete(_entry->Data.load(std::memory_order_acquire));
-                _entry->Data.store(nullptr, std::memory_order_release);
+    // 先从 map 脱离所有 Entry，但暂时不删除 Entry。本阶段必须保证所有 Entry
+    // 都还活着，因为 Material/Mesh 的析构会释放它们持有的 AssetRef。
+    auto meshEntries = meshes.ExtractAll();
+    auto textureEntries = textures.ExtractAll();
+    auto shaderEntries = shaders.ExtractAll();
+    auto materialEntries = materials.ExtractAll();
+    auto renderTargetEntries = rendertargets.ExtractAll();
+    auto skyBoxEntries = skyboxes.ExtractAll();
 
-                //清除Entry
-                Pitaya::Core::Delete(_entry);
-                _entry = nullptr;
-            }
-            return true;
-        });
-    textures.ForEachCheckErase(
-        [](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry*& _entry)
+    auto clearEntryData = [](auto& entries)
+    {
+        for (auto& [guid, entry] : entries)
         {
-            if (_entry)
-            {
-                //清除Entry内部data数据
-                Pitaya::Core::Delete(_entry->Data.load(std::memory_order_acquire));
-                _entry->Data.store(nullptr, std::memory_order_release);
+            (void)guid;
+            if (!entry) { continue; }
+            auto* data = entry->Data.exchange(nullptr, std::memory_order_acq_rel);
+            Pitaya::Core::Delete(data);
+            entry->State = Pitaya::Core::AssetState::Empty;
+        }
+    };
 
-                //清除Entry
-                Pitaya::Core::Delete(_entry);
-                _entry = nullptr;
-            }
-            return true;
-        });
-    shaders.ForEachCheckErase(
-        [](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry*& _entry)
-        {
-            if (_entry)
-            {
-                //清除Entry内部data数据
-                Pitaya::Core::Delete(_entry->Data.load(std::memory_order_acquire));
-                _entry->Data.store(nullptr, std::memory_order_release);
+    // Entry 在这一阶段全部保留，所以跨资源 AssetRef 的析构顺序不会访问悬空指针。
+    clearEntryData(meshEntries);
+    clearEntryData(textureEntries);
+    clearEntryData(shaderEntries);
+    clearEntryData(materialEntries);
+    clearEntryData(renderTargetEntries);
+    clearEntryData(skyBoxEntries);
 
-                //清除Entry
-                Pitaya::Core::Delete(_entry);
-                _entry = nullptr;
-            }
-            return true;
-        });
-    materials.ForEachCheckErase(
-        [](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Material>::AssetEntry*& _entry)
-        {
-            if (_entry)
-            {
-                Pitaya::Core::Delete(_entry->Data.load(std::memory_order_acquire));
-                _entry->Data.store(nullptr, std::memory_order_release);
-                Pitaya::Core::Delete(_entry);
-                _entry = nullptr;
-            }
-            return true;
-        });
-    rendertargets.ForEachCheckErase(
-        [](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry*& _entry)
-        {
-            if (_entry)
-            {
-                //清除Entry内部data数据
-                Pitaya::Core::Delete(_entry->Data.load(std::memory_order_acquire));
-                _entry->Data.store(nullptr, std::memory_order_release);
+    auto clearBuiltinData = [](auto& entry)
+    {
+        auto* data = entry.Data.exchange(nullptr, std::memory_order_acq_rel);
+        Pitaya::Core::Delete(data);
+        entry.State = Pitaya::Core::AssetState::Empty;
+    };
 
-                //清除Entry
-                Pitaya::Core::Delete(_entry);
-                _entry = nullptr;
-            }
-            return true;
-        });
-    skyboxes.ForEachCheckErase(
-        [](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry*& _entry)
-        {
-            if (_entry)
-            {
-                Pitaya::Core::Delete(_entry->Data.load(std::memory_order_acquire));
-                _entry->Data.store(nullptr, std::memory_order_release);
-                Pitaya::Core::Delete(_entry);
-                _entry = nullptr;
-            }
-            return true;
-        });
+    clearBuiltinData(builtins.PBRStaticShader);
+    clearBuiltinData(builtins.PBRSkinnedShader);
+    clearBuiltinData(builtins.White);
+    clearBuiltinData(builtins.Black);
+    clearBuiltinData(builtins.FlatNormal);
+    clearBuiltinData(builtins.PBRMaterial);
+    clearBuiltinData(builtins.Cube);
+    clearBuiltinData(builtins.Sphere);
+    clearBuiltinData(builtins.Panel);
+    clearBuiltinData(builtins.DefaultSkyBox);
 
-    //清除内置资源
-    Pitaya::Core::Delete(builtins.PBRStaticShader.Data.load(std::memory_order_acquire)); builtins.PBRStaticShader.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.PBRSkinnedShader.Data.load(std::memory_order_acquire)); builtins.PBRSkinnedShader.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.White.Data.load(std::memory_order_acquire)); builtins.White.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.Black.Data.load(std::memory_order_acquire)); builtins.Black.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.FlatNormal.Data.load(std::memory_order_acquire)); builtins.FlatNormal.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.PBRMaterial.Data.load(std::memory_order_acquire)); builtins.PBRMaterial.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.Cube.Data.load(std::memory_order_acquire)); builtins.Cube.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.Sphere.Data.load(std::memory_order_acquire)); builtins.Sphere.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.Panel.Data.load(std::memory_order_acquire)); builtins.Panel.Data.store(nullptr, std::memory_order_release);
-    Pitaya::Core::Delete(builtins.DefaultSkyBox.Data.load(std::memory_order_acquire)); builtins.DefaultSkyBox.Data.store(nullptr, std::memory_order_release);
+    auto destroyEntries = [](auto& entries)
+    {
+        for (auto& [guid, entry] : entries)
+        {
+            if (!entry) { continue; }
+            if (entry->RefCount.HasRef())
+            {
+                Pitaya::Log::Warning("asset entry retained after AssetHub shutdown, GUID:{}", guid);
+                // 外部 AssetRef 仍可能在引擎模块释放后析构。保留 Entry 可以避免
+                // AssetRef 析构时访问已释放的引用计数；Data 已经被置空。
+                continue;
+            }
+            Pitaya::Core::Delete(entry);
+        }
+        entries.clear();
+    };
+
+    destroyEntries(meshEntries);
+    destroyEntries(textureEntries);
+    destroyEntries(shaderEntries);
+    destroyEntries(materialEntries);
+    destroyEntries(renderTargetEntries);
+    destroyEntries(skyBoxEntries);
 
     if (!database.Save())
     {
