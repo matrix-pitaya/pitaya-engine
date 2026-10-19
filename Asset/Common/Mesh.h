@@ -24,6 +24,8 @@ namespace Pitaya::Asset
 		};
 
 		Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle VertexArrayHandle;
+		Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle VertexBufferHandle;
+		Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle IndexBufferHandle;
 		std::vector<SubMesh> SubMeshs;
 		Pitaya::Core::AABB BoundingBox;
 

@@ -118,37 +118,38 @@ namespace Pitaya::Asset
                 [this]() ->bool { return renderOperations.empty(); },
                 [this, &handler]()
                 {
+                    const uint64_t generation = renderOperations.front().Generation;
                     std::visit(
-                        [this, &handler](auto& operation)
+                        [this, &handler, generation](auto& operation)
                         {
                             using Operation = std::remove_cvref_t<decltype(operation)>;
                             if constexpr (std::is_same_v<Operation, Pitaya::Import::Texture2DImportResult>)
                             {
-                                ProcessTexture2D(operation);
+                                ProcessTexture2D(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::TextureCubemapImportResult>)
                             {
-                                ProcessTextureCubemap(operation);
+                                ProcessTextureCubemap(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::ShaderImportResult>)
                             {
-                                ProcessShader(operation);
+                                ProcessShader(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::StaticMeshImportResult>)
                             {
-                                ProcessStaticMesh(operation);
+                                ProcessStaticMesh(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::SkinnedMeshImportResult>)
                             {
-                                ProcessSkinnedMesh(operation);
+                                ProcessSkinnedMesh(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::RenderTargetImportResult>)
                             {
-                                ProcessRenderTarget(operation);
+                                ProcessRenderTarget(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::SkyBoxImportResult>)
                             {
-                                ProcessSkyBox(operation);
+                                ProcessSkyBox(operation, generation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Asset::Texture2DUnloadRequire>)
                             {
@@ -177,7 +178,7 @@ namespace Pitaya::Asset
             return textureEntryLookup ? textureEntryLookup(textureCallbackUserData, guid) : nullptr;
         }
 
-        inline void ProcessTexture2D(Pitaya::Import::Texture2DImportResult& result)
+        inline void ProcessTexture2D(Pitaya::Import::Texture2DImportResult& result, uint64_t generation)
         {
             TextureEntry* entry = FindTextureEntry(result.GUID);
             if (!entry)
@@ -185,6 +186,7 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("texture asset entry not found, GUID:{}", result.GUID);
                 return;
             }
+            if (!entry->IsLoadGeneration(generation)) { return; }
             if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::Log::Error("texture asset marked as unload, GUID:{}", result.GUID);
@@ -196,7 +198,7 @@ namespace Pitaya::Asset
             if (!texture)
             {
                 Pitaya::Log::Error("texture asset data is empty, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -206,7 +208,7 @@ namespace Pitaya::Asset
             if (!handle)
             {
                 Pitaya::Log::Error("texture GPU resource creation failed, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -216,7 +218,7 @@ namespace Pitaya::Asset
                 {
                     Pitaya::Log::Error("failed to destroy aborted texture GPU resource, GUID:{}", result.GUID);
                 }
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -224,10 +226,10 @@ namespace Pitaya::Asset
             texture->Type = Pitaya::GPU::TextureType::Texture2D;
             texture->Usage = result.Usage;
             Pitaya::Log::Info("successfully created GPU resources for texture2D GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
-        inline void ProcessTextureCubemap(Pitaya::Import::TextureCubemapImportResult& result)
+        inline void ProcessTextureCubemap(Pitaya::Import::TextureCubemapImportResult& result, uint64_t generation)
         {
             TextureEntry* entry = FindTextureEntry(result.GUID);
             if (!entry)
@@ -235,7 +237,8 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("texture cubemap asset entry not found, GUID:{}", result.GUID);
                 return;
             }
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation)) { return; }
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::Log::Error("texture cubemap asset marked as unload, GUID:{}", result.GUID);
                 return;
@@ -246,7 +249,7 @@ namespace Pitaya::Asset
             if (!texture)
             {
                 Pitaya::Log::Error("texture cubemap asset data is empty, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -258,17 +261,17 @@ namespace Pitaya::Asset
             if (!handle)
             {
                 Pitaya::Log::Error("texture cubemap GPU resource creation failed, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 if (!Pitaya::GPU::DestroyTextureCubemap(handle))
                 {
                     Pitaya::Log::Error("failed to destroy aborted texture cubemap GPU resource, GUID:{}", result.GUID);
                 }
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -276,7 +279,7 @@ namespace Pitaya::Asset
             texture->Type = Pitaya::GPU::TextureType::TextureCubemap;
             texture->Usage = result.Usage;
             Pitaya::Log::Info("successfully created GPU resources for texture cubemap GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
         inline void ProcessTexture2DUnload(Pitaya::Asset::Texture2DUnloadRequire& operation)
@@ -289,7 +292,7 @@ namespace Pitaya::Asset
             return shaderEntryLookup ? shaderEntryLookup(shaderCallbackUserData, guid) : nullptr;
         }
 
-        inline void ProcessShader(Pitaya::Import::ShaderImportResult& result)
+        inline void ProcessShader(Pitaya::Import::ShaderImportResult& result, uint64_t generation)
         {
             ShaderEntry* entry = FindShaderEntry(result.GUID);
             if (!entry)
@@ -297,6 +300,7 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("shader asset entry not found, GUID:{}", result.GUID);
                 return;
             }
+            if (!entry->IsLoadGeneration(generation)) { return; }
             if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::Log::Error("shader asset marked as unload, GUID:{}", result.GUID);
@@ -333,23 +337,23 @@ namespace Pitaya::Asset
 
             if (!handle)
             {
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 if (!Pitaya::GPU::DestroyShader(handle))
                 {
                     Pitaya::Log::Error("failed to destroy aborted shader GPU resource, GUID:{}", result.GUID);
                 }
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
             shader->ShaderHandle = handle;
             Pitaya::Log::Info("successfully created GPU resources for shader GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
         inline MeshEntry* FindMeshEntry(Pitaya::Core::GUID guid) const
@@ -357,7 +361,7 @@ namespace Pitaya::Asset
             return meshEntryLookup ? meshEntryLookup(meshCallbackUserData, guid) : nullptr;
         }
 
-        inline bool BeginMeshUpload(Pitaya::Core::GUID guid, MeshEntry*& entry, const char* typeName)
+        inline bool BeginMeshUpload(Pitaya::Core::GUID guid, MeshEntry*& entry, const char* typeName, uint64_t generation)
         {
             entry = FindMeshEntry(guid);
             if (!entry)
@@ -365,7 +369,7 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("{} asset entry not found, GUID:{}", typeName, guid);
                 return false;
             }
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::Log::Error("{} asset marked as unload, GUID:{}", typeName, guid);
                 return false;
@@ -398,27 +402,22 @@ namespace Pitaya::Asset
 
         inline void DestroyMeshBuffers(Pitaya::Asset::Mesh& mesh)
         {
-            const auto vao = mesh.VertexArrayHandle;
-            if (!vao) { return; }
-
-            Pitaya::GPU::VertexArray vertexArray;
-            if (Pitaya::GPU::GetVertexArray(vao, vertexArray))
-            {
-                if (vertexArray.VertexBufferHandle) { Pitaya::GPU::DestroyVertexBuffer(vertexArray.VertexBufferHandle); }
-                if (vertexArray.IndexBufferHandle) { Pitaya::GPU::DestroyIndexBuffer(vertexArray.IndexBufferHandle); }
-            }
-            Pitaya::GPU::DestroyVertexArray(vao);
+            if (mesh.VertexArrayHandle) { Pitaya::GPU::DestroyVertexArray(mesh.VertexArrayHandle); }
+            if (mesh.VertexBufferHandle) { Pitaya::GPU::DestroyVertexBuffer(mesh.VertexBufferHandle); }
+            if (mesh.IndexBufferHandle) { Pitaya::GPU::DestroyIndexBuffer(mesh.IndexBufferHandle); }
             mesh.VertexArrayHandle = Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle::Invalid;
+            mesh.VertexBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle::Invalid;
+            mesh.IndexBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle::Invalid;
         }
 
-        inline void ProcessStaticMesh(Pitaya::Import::StaticMeshImportResult& result)
+        inline void ProcessStaticMesh(Pitaya::Import::StaticMeshImportResult& result, uint64_t generation)
         {
             MeshEntry* entry = nullptr;
-            if (!BeginMeshUpload(result.GUID, entry, "static mesh")) { return; }
+            if (!BeginMeshUpload(result.GUID, entry, "static mesh", generation)) { return; }
             if (!result.IsValid || result.Vertices.empty() || result.Indices.empty())
             {
                 Pitaya::Log::Error("invalid static mesh CPU result, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -426,7 +425,7 @@ namespace Pitaya::Asset
             if (!mesh)
             {
                 Pitaya::Log::Error("static mesh asset data is empty, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -434,17 +433,19 @@ namespace Pitaya::Asset
             Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle vbo;
             Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle ibo;
             if (!CreateMeshBuffers(result.Vertices, result.Indices, result.VertexLayout, vao, vbo, ibo)
-                || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+                || !entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 if (vao) { Pitaya::GPU::DestroyVertexArray(vao); }
                 if (vbo) { Pitaya::GPU::DestroyVertexBuffer(vbo); }
                 if (ibo) { Pitaya::GPU::DestroyIndexBuffer(ibo); }
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
             DestroyMeshBuffers(*mesh);
             mesh->VertexArrayHandle = vao;
+            mesh->VertexBufferHandle = vbo;
+            mesh->IndexBufferHandle = ibo;
             mesh->BoundingBox = result.BoundingBox;
             mesh->SubMeshs = std::move(result.SubMeshs);
             mesh->Materials.clear();
@@ -454,17 +455,17 @@ namespace Pitaya::Asset
             }
             mesh->Type = Pitaya::GPU::MeshType::Static;
             Pitaya::Log::Info("successfully created GPU resources for static mesh GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
-        inline void ProcessSkinnedMesh(Pitaya::Import::SkinnedMeshImportResult& result)
+        inline void ProcessSkinnedMesh(Pitaya::Import::SkinnedMeshImportResult& result, uint64_t generation)
         {
             MeshEntry* entry = nullptr;
-            if (!BeginMeshUpload(result.GUID, entry, "skinned mesh")) { return; }
+            if (!BeginMeshUpload(result.GUID, entry, "skinned mesh", generation)) { return; }
             if (!result.IsValid || result.Vertices.empty() || result.Indices.empty())
             {
                 Pitaya::Log::Error("invalid skinned mesh CPU result, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -472,7 +473,7 @@ namespace Pitaya::Asset
             if (!mesh)
             {
                 Pitaya::Log::Error("skinned mesh asset data is empty, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -480,17 +481,19 @@ namespace Pitaya::Asset
             Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle vbo;
             Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle ibo;
             if (!CreateMeshBuffers(result.Vertices, result.Indices, result.VertexLayout, vao, vbo, ibo)
-                || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+                || !entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 if (vao) { Pitaya::GPU::DestroyVertexArray(vao); }
                 if (vbo) { Pitaya::GPU::DestroyVertexBuffer(vbo); }
                 if (ibo) { Pitaya::GPU::DestroyIndexBuffer(ibo); }
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
             DestroyMeshBuffers(*mesh);
             mesh->VertexArrayHandle = vao;
+            mesh->VertexBufferHandle = vbo;
+            mesh->IndexBufferHandle = ibo;
             mesh->SubMeshs = std::move(result.SubMeshs);
             mesh->BoneInverseMatrices = std::move(result.BoneInverseMatrices);
             mesh->BoneCount = result.BoneCount;
@@ -502,7 +505,7 @@ namespace Pitaya::Asset
             }
             mesh->Type = Pitaya::GPU::MeshType::SkinnedMesh;
             Pitaya::Log::Info("successfully created GPU resources for skinned mesh GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
         inline RenderTargetEntry* FindRenderTargetEntry(Pitaya::Core::GUID guid) const
@@ -522,7 +525,7 @@ namespace Pitaya::Asset
             renderTarget.FinalFrameBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::FrameBuffer>::Handle::Invalid;
         }
 
-        inline void ProcessRenderTarget(Pitaya::Import::RenderTargetImportResult& result)
+        inline void ProcessRenderTarget(Pitaya::Import::RenderTargetImportResult& result, uint64_t generation)
         {
             RenderTargetEntry* entry = FindRenderTargetEntry(result.GUID);
             if (!entry)
@@ -530,7 +533,7 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("render target asset entry not found, GUID:{}", result.GUID);
                 return;
             }
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::Log::Error("render target asset marked as unload, GUID:{}", result.GUID);
                 return;
@@ -541,7 +544,7 @@ namespace Pitaya::Asset
             if (!renderTarget)
             {
                 Pitaya::Log::Error("render target asset data is empty, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -555,17 +558,17 @@ namespace Pitaya::Asset
                 Pitaya::GPU::DestroyFrameBuffer(pingPongHandle0);
                 Pitaya::GPU::DestroyFrameBuffer(pingPongHandle1);
                 Pitaya::GPU::DestroyFrameBuffer(finalHandle);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::GPU::DestroyFrameBuffer(sceneHandle);
                 Pitaya::GPU::DestroyFrameBuffer(pingPongHandle0);
                 Pitaya::GPU::DestroyFrameBuffer(pingPongHandle1);
                 Pitaya::GPU::DestroyFrameBuffer(finalHandle);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -575,7 +578,7 @@ namespace Pitaya::Asset
             renderTarget->PingPongFrameBufferHandles[1] = pingPongHandle1;
             renderTarget->FinalFrameBufferHandle = finalHandle;
             Pitaya::Log::Info("successfully created GPU resources for render target GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
         inline SkyBoxEntry* FindSkyBoxEntry(Pitaya::Core::GUID guid) const
@@ -595,7 +598,7 @@ namespace Pitaya::Asset
             skyBox.PrefilteredHandle = Pitaya::Core::SlotMap<Pitaya::GPU::TextureCubemap>::Handle::Invalid;
         }
 
-        inline void ProcessSkyBox(Pitaya::Import::SkyBoxImportResult& result)
+        inline void ProcessSkyBox(Pitaya::Import::SkyBoxImportResult& result, uint64_t generation)
         {
             SkyBoxEntry* entry = FindSkyBoxEntry(result.GUID);
             if (!entry)
@@ -603,7 +606,7 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("skybox asset entry not found, GUID:{}", result.GUID);
                 return;
             }
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
             {
                 Pitaya::Log::Error("skybox asset marked as unload, GUID:{}", result.GUID);
                 return;
@@ -614,7 +617,7 @@ namespace Pitaya::Asset
             if (!skyBox || result.Width <= 0 || result.Height <= 0 || result.Data.empty())
             {
                 Pitaya::Log::Error("invalid skybox CPU result, GUID:{}", result.GUID);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -629,18 +632,18 @@ namespace Pitaya::Asset
                 Pitaya::GPU::DestroyTextureCubemap(envHandle);
                 Pitaya::GPU::DestroyTextureCubemap(irradianceHandle);
                 Pitaya::GPU::DestroyTextureCubemap(prefilteredHandle);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
             const Pitaya::Render::IBLBakeInput bakeInput{ equirectHandle, envHandle, irradianceHandle, prefilteredHandle };
-            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload) || !Pitaya::Render::BakeIBL(bakeInput))
+            if (!entry->IsLoadGeneration(generation) || entry->State.HasBits(Pitaya::Core::AssetState::Unload) || !Pitaya::Render::BakeIBL(bakeInput))
             {
                 Pitaya::GPU::DestroyTexture2D(equirectHandle);
                 Pitaya::GPU::DestroyTextureCubemap(envHandle);
                 Pitaya::GPU::DestroyTextureCubemap(irradianceHandle);
                 Pitaya::GPU::DestroyTextureCubemap(prefilteredHandle);
-                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading); }
                 return;
             }
 
@@ -650,7 +653,7 @@ namespace Pitaya::Asset
             skyBox->IrradianceHandle = irradianceHandle;
             skyBox->PrefilteredHandle = prefilteredHandle;
             Pitaya::Log::Info("successfully created GPU resources for skybox GUID:{}", result.GUID);
-            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+            if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading); }
         }
 
     private:

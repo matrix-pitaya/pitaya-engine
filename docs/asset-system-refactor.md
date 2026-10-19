@@ -174,11 +174,15 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 当前已完成队列边界抽取：`GpuAssetBridge` 由 `AssetHub` 独占构造和管理，CPU/导入线程只调用 `Enqueue`；消费入口要求 `PassKey<Renderer>`，并在运行时校验当前线程确实是 Render 线程。Texture、Shader、Mesh、RenderTarget 和 SkyBox 的 OpenGL 资源创建、更新和销毁已经由桥接层在该入口中执行，AssetHub 的 fallback handler 目前只保留未知操作。
 
+异步加载请求现在为每个 `AssetEntry` 分配递增的 `LoadGeneration`，并把 generation 写入 `AssetOperate`。CPU 任务完成、AssetHub 的兜底失败处理和 GpuAssetBridge 的每类上传处理器都会校验 generation；旧一轮重载结果会被丢弃，已经创建的临时 GPU 句柄会先销毁。
+
+请求卸载也会使当前 generation 失效，因此卸载和重载之间排队的旧 CPU/GPU 操作不会重新写入资源状态。
+
 资产提交现在通过 Render FuncTable 调用 `Renderer::WakeupAssetUpload`，由 Renderer 在自身 mutex 下记录上传唤醒请求，再调用 `cond.notify_one()`；AssetHub 和 GpuAssetBridge 不直接访问 Renderer 的 mutex/condition_variable。这样即使后台没有新的 RenderPacket，异步资产提交也能可靠唤醒渲染线程。
 
 纹理、Shader、Mesh、Framebuffer 和 SkyBox 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载、VF/VFG Shader、Static/Skinned Mesh、RenderTarget FrameBuffer 以及 SkyBox IBL 纹理都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。
 
-这次 Mesh 迁移同时修复了三个加载问题：Skinned Mesh 不再在 CPU 阶段静默返回；VAO/VBO/IBO 任一创建或链接失败时会回滚已经创建的句柄；重复加载时会先清空旧的材质引用，再根据导入结果重新绑定材质。
+这次 Mesh 迁移同时修复了三个加载问题：Skinned Mesh 不再在 CPU 阶段静默返回；VAO/VBO/IBO 任一创建或链接失败时会回滚已经创建的句柄；重复加载时会先清空旧的材质引用，再根据导入结果重新绑定材质。Mesh 现在同时保存 VAO、VBO、IBO 三个句柄，重载时可以成组回收旧 GPU 缓冲。
 
 RenderTarget 和 SkyBox 也使用同一套 RenderThread 上传路径：FrameBuffer 组或 IBL 纹理创建不完整时会清理已创建句柄，SkyBox 的 IBL 烘焙失败或收到卸载请求时会清理临时纹理，只有完整上传成功后才替换旧资源。
 
@@ -213,7 +217,6 @@ AssetOperate 队列（只传递 CPU 数据和 GPU 命令参数）
 
 - `AssetHub::Release` 直接删除裸 `AssetEntry*`。
 - `UnloadAsset` 不检查外部引用计数。
-- AssetOperate 结果没有 generation。
 - Material 反序列化没有恢复 Textures。
 - Skinned Mesh 导入失败时可能长期停留在 CPULoading。
 - StbImage 的全局 flip 状态不适合并行导入。
