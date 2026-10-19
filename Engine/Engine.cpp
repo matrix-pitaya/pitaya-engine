@@ -786,10 +786,10 @@ void Pitaya::Engine::Engine::Release()
         //MODULE(ScriptRuntime).Release();
         MODULE(PhysicsSimulator).Release();
         MODULE(TaskScheduler).Release();
-        MODULE(RHIDevice).Release();
-        MODULE(RenderPipeline).Release();
         MODULE(Renderer).Release();
+        MODULE(RenderPipeline).Release();
         MODULE(AssetHub).Release();
+        MODULE(RHIDevice).Release();
         MODULE(Window).Release();
         MODULE(EventDispatcher).Release();
         MODULE(ThreadTracker).Release();
@@ -805,11 +805,11 @@ void Pitaya::Engine::Engine::Release()
         MODULE(InputMonitor).Destroy();
         MODULE(PhysicsSimulator).Destroy();
         MODULE(TaskScheduler).Destroy();
+        MODULE(AssetHub).Destroy();
         MODULE(RenderPipeline).Destroy();
         MODULE(Renderer).Destroy();
         MODULE(RHIDevice).Destroy();
         MODULE(Configurator).Destroy();
-        MODULE(AssetHub).Destroy();
         MODULE(Window).Destroy();
         MODULE(EventDispatcher).Destroy();
         MODULE(ThreadTracker).Destroy();

@@ -178,6 +178,8 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 请求卸载也会使当前 generation 失效，因此卸载和重载之间排队的旧 CPU/GPU 操作不会重新写入资源状态。
 
+引擎关闭顺序现在先停止任务调度器和渲染线程，再释放 RenderPipeline、AssetHub，最后释放 RHIDevice；任务调度器在停止态拒绝新的作业，避免退出阶段又提交资产导入任务。渲染线程退出时仍然拥有有效的 OpenGL context，可以完成 GPU 资源清理。
+
 资产提交现在通过 Render FuncTable 调用 `Renderer::WakeupAssetUpload`，由 Renderer 在自身 mutex 下记录上传唤醒请求，再调用 `cond.notify_one()`；AssetHub 和 GpuAssetBridge 不直接访问 Renderer 的 mutex/condition_variable。这样即使后台没有新的 RenderPacket，异步资产提交也能可靠唤醒渲染线程。
 
 纹理、Shader、Mesh、Framebuffer 和 SkyBox 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载、VF/VFG Shader、Static/Skinned Mesh、RenderTarget FrameBuffer 以及 SkyBox IBL 纹理都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。
@@ -213,11 +215,12 @@ AssetOperate 队列（只传递 CPU 数据和 GPU 命令参数）
 - Release x64 构建通过。
 - 现有内置资产、纹理、Shader、Mesh、Material 和 SkyBox 加载行为不改变。
 
+Material 反序列化现在会恢复 Shader 参数布局和 `Textures` 子节点中的纹理 GUID，Mesh 材质加载后可以重新建立纹理依赖。
+
 ## 7. 后续必须修复的问题
 
-- `AssetHub::Release` 直接删除裸 `AssetEntry*`。
+- `AssetHub::Release` 直接删除裸 `AssetEntry*`，仍需要后续增加引用计数和延迟回收。
 - `UnloadAsset` 不检查外部引用计数。
-- Material 反序列化没有恢复 Textures。
 - Skinned Mesh 导入失败时可能长期停留在 CPULoading。
 - StbImage 的全局 flip 状态不适合并行导入。
 - HDR 图片检测后仍可能使用 8-bit 导入路径。

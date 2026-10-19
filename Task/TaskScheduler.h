@@ -95,6 +95,11 @@ namespace Pitaya::Task
 			Pitaya::Log::Info("{} Job is Posted!", name);
 			{
 				std::lock_guard<std::mutex> lock(mutex);
+                if (!isRunning.load(std::memory_order_acquire))
+                {
+                    Pitaya::Log::Warning("{} Job is rejected because task scheduler is stopping", name);
+                    return;
+                }
 				jobs.emplace(std::move(func), name);
 			}
 			cond.notify_one();

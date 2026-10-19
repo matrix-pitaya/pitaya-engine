@@ -124,6 +124,35 @@ namespace Pitaya::Asset
                     }
                 }
             }
+
+            if (!Shader) { return; }
+
+            FloatParams.resize(Shader->ParamLayout.FloatCount);
+            VectorParams.resize(Shader->ParamLayout.VectorCount);
+            Textures.resize(Shader->ParamLayout.TextureCount);
+
+            if (!context.HasSubContext("Textures")) { return; }
+
+            const auto& textures = context.GetSubContext("Textures");
+            for (const auto& slot : Shader->ParamLayout.Slots)
+            {
+                if (slot.Type != ParamType::Texture || slot.Name == nullptr || slot.Index >= Textures.size())
+                {
+                    continue;
+                }
+
+                if (!textures.HasSubContext(slot.Name)) { continue; }
+
+                std::string textureGUID;
+                const auto& texture = textures.GetSubContext(slot.Name);
+                if (texture.Read("GUID", textureGUID))
+                {
+                    if (Pitaya::Core::GUID guid = Pitaya::Core::GUID(textureGUID))
+                    {
+                        Textures[slot.Index] = Pitaya::Asset::LoadAsset<Pitaya::Asset::Texture>(guid);
+                    }
+                }
+            }
         }
     };
 }
