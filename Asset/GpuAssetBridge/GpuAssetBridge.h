@@ -77,6 +77,14 @@ namespace Pitaya::Asset
             Pitaya::Render::WakeupAssetUpload();
         }
 
+        inline void EnqueueUnload(Pitaya::Asset::AssetOperate&& operate)
+        {
+            // 卸载命令单独排队。Process 会先保留一个渲染循环，再在下一次循环
+            // 的 OpenGL 上下文中销毁句柄，保证当前帧已经完成提交和 fence。
+            pendingUnloadOperations.Push(std::move(operate));
+            Pitaya::Render::WakeupAssetUpload();
+        }
+
         inline void SetTextureCallbacks(void* userData, TextureEntryLookup lookup)
         {
             textureCallbackUserData = userData;
@@ -112,6 +120,12 @@ namespace Pitaya::Asset
         {
             (void)passkey;
             PITAYA_CHECK(Pitaya::Thread::GetIsInThread(Pitaya::Thread::ThreadType::Render));
+
+            ProcessDeferredUnloads();
+            if (deferredUnloadOperations.empty())
+            {
+                deferredUnloadOperations = pendingUnloadOperations.PopN(5);
+            }
             if (renderOperations.empty()) { renderOperations = pendingOperations.PopN(5); }
 
             Pitaya::Core::InvokeWithTimeBudget(
@@ -155,6 +169,16 @@ namespace Pitaya::Asset
                             {
                                 ProcessTexture2DUnload(operation);
                             }
+                            else if constexpr (std::is_same_v<Operation, Pitaya::Asset::Texture2DArrayUnloadRequire>
+                                || std::is_same_v<Operation, Pitaya::Asset::TextureCubemapUnloadRequire>
+                                || std::is_same_v<Operation, Pitaya::Asset::ShaderUnloadRequire>
+                                || std::is_same_v<Operation, Pitaya::Asset::MeshUnloadRequire>
+                                || std::is_same_v<Operation, Pitaya::Asset::RenderTargetUnloadRequire>
+                                || std::is_same_v<Operation, Pitaya::Asset::SkyBoxUnloadRequire>)
+                            {
+                                // Unload commands enter through EnqueueUnload so they can be
+                                // deferred for one render loop. They are consumed below.
+                            }
                             else
                             {
                                 handler(operation);
@@ -169,10 +193,56 @@ namespace Pitaya::Asset
         inline bool HasPending(Pitaya::Core::PassKey<Pitaya::Render::Renderer> passkey) const
         {
             (void)passkey;
-            return !renderOperations.empty() || !pendingOperations.Empty();
+            return !renderOperations.empty() || !deferredUnloadOperations.empty()
+                || !pendingOperations.Empty() || !pendingUnloadOperations.Empty();
         }
 
     private:
+        inline void ProcessDeferredUnloads()
+        {
+            // 只处理上一次 Process 已经转入 deferred 队列的命令。
+            // 本次刚提交的卸载命令会至少等待一个渲染循环。
+            while (!deferredUnloadOperations.empty())
+            {
+                auto& operation = deferredUnloadOperations.front();
+                std::visit(
+                    [this](auto& unload)
+                    {
+                        using Operation = std::remove_cvref_t<decltype(unload)>;
+                        if constexpr (std::is_same_v<Operation, Pitaya::Asset::Texture2DUnloadRequire>)
+                        {
+                            ProcessTexture2DUnload(unload);
+                        }
+                        else if constexpr (std::is_same_v<Operation, Pitaya::Asset::Texture2DArrayUnloadRequire>)
+                        {
+                            ProcessTexture2DArrayUnload(unload);
+                        }
+                        else if constexpr (std::is_same_v<Operation, Pitaya::Asset::TextureCubemapUnloadRequire>)
+                        {
+                            ProcessTextureCubemapUnload(unload);
+                        }
+                        else if constexpr (std::is_same_v<Operation, Pitaya::Asset::ShaderUnloadRequire>)
+                        {
+                            ProcessShaderUnload(unload);
+                        }
+                        else if constexpr (std::is_same_v<Operation, Pitaya::Asset::MeshUnloadRequire>)
+                        {
+                            ProcessMeshUnload(unload);
+                        }
+                        else if constexpr (std::is_same_v<Operation, Pitaya::Asset::RenderTargetUnloadRequire>)
+                        {
+                            ProcessRenderTargetUnload(unload);
+                        }
+                        else if constexpr (std::is_same_v<Operation, Pitaya::Asset::SkyBoxUnloadRequire>)
+                        {
+                            ProcessSkyBoxUnload(unload);
+                        }
+                    },
+                    operation.Data);
+                deferredUnloadOperations.pop();
+            }
+        }
+
         inline TextureEntry* FindTextureEntry(Pitaya::Core::GUID guid) const
         {
             return textureEntryLookup ? textureEntryLookup(textureCallbackUserData, guid) : nullptr;
@@ -284,7 +354,45 @@ namespace Pitaya::Asset
 
         inline void ProcessTexture2DUnload(Pitaya::Asset::Texture2DUnloadRequire& operation)
         {
-            Pitaya::GPU::DestroyTexture2D(operation.Texture2DHandle);
+            if (operation.Texture2DHandle) { Pitaya::GPU::DestroyTexture2D(operation.Texture2DHandle); }
+        }
+
+        inline void ProcessTexture2DArrayUnload(Pitaya::Asset::Texture2DArrayUnloadRequire& operation)
+        {
+            if (operation.Texture2DArrayHandle) { Pitaya::GPU::DestroyTexture2DArray(operation.Texture2DArrayHandle); }
+        }
+
+        inline void ProcessTextureCubemapUnload(Pitaya::Asset::TextureCubemapUnloadRequire& operation)
+        {
+            if (operation.TextureCubemapHandle) { Pitaya::GPU::DestroyTextureCubemap(operation.TextureCubemapHandle); }
+        }
+
+        inline void ProcessShaderUnload(Pitaya::Asset::ShaderUnloadRequire& operation)
+        {
+            if (operation.ShaderHandle) { Pitaya::GPU::DestroyShader(operation.ShaderHandle); }
+        }
+
+        inline void ProcessMeshUnload(Pitaya::Asset::MeshUnloadRequire& operation)
+        {
+            if (operation.VertexArrayHandle) { Pitaya::GPU::DestroyVertexArray(operation.VertexArrayHandle); }
+            if (operation.VertexBufferHandle) { Pitaya::GPU::DestroyVertexBuffer(operation.VertexBufferHandle); }
+            if (operation.IndexBufferHandle) { Pitaya::GPU::DestroyIndexBuffer(operation.IndexBufferHandle); }
+        }
+
+        inline void ProcessRenderTargetUnload(Pitaya::Asset::RenderTargetUnloadRequire& operation)
+        {
+            if (operation.SceneFrameBufferHandle) { Pitaya::GPU::DestroyFrameBuffer(operation.SceneFrameBufferHandle); }
+            if (operation.PingPongFrameBufferHandles[0]) { Pitaya::GPU::DestroyFrameBuffer(operation.PingPongFrameBufferHandles[0]); }
+            if (operation.PingPongFrameBufferHandles[1]) { Pitaya::GPU::DestroyFrameBuffer(operation.PingPongFrameBufferHandles[1]); }
+            if (operation.FinalFrameBufferHandle) { Pitaya::GPU::DestroyFrameBuffer(operation.FinalFrameBufferHandle); }
+        }
+
+        inline void ProcessSkyBoxUnload(Pitaya::Asset::SkyBoxUnloadRequire& operation)
+        {
+            if (operation.EquirectHandle) { Pitaya::GPU::DestroyTexture2D(operation.EquirectHandle); }
+            if (operation.EnvCubemapHandle) { Pitaya::GPU::DestroyTextureCubemap(operation.EnvCubemapHandle); }
+            if (operation.IrradianceHandle) { Pitaya::GPU::DestroyTextureCubemap(operation.IrradianceHandle); }
+            if (operation.PrefilteredHandle) { Pitaya::GPU::DestroyTextureCubemap(operation.PrefilteredHandle); }
         }
 
         inline ShaderEntry* FindShaderEntry(Pitaya::Core::GUID guid) const
@@ -668,6 +776,8 @@ namespace Pitaya::Asset
         void* skyBoxCallbackUserData = nullptr;
         SkyBoxEntryLookup skyBoxEntryLookup = nullptr;
         Pitaya::Core::ThreadSafeQueue<Pitaya::Asset::AssetOperate> pendingOperations;
+        Pitaya::Core::ThreadSafeQueue<Pitaya::Asset::AssetOperate> pendingUnloadOperations;
         std::queue<Pitaya::Asset::AssetOperate> renderOperations;
+        std::queue<Pitaya::Asset::AssetOperate> deferredUnloadOperations;
     };
 }

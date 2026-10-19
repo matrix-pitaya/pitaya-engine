@@ -184,6 +184,8 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 纹理、Shader、Mesh、Framebuffer 和 SkyBox 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载、VF/VFG Shader、Static/Skinned Mesh、RenderTarget FrameBuffer 以及 SkyBox IBL 纹理都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。
 
+运行时卸载现在要求没有存活的外部 `AssetRef`，并拒绝在 CPU/GPU 加载过程中卸载。`AssetHub::UnloadAsset<T>` 先递增 generation 使旧上传结果失效，再把 GPU 句柄快照提交给 `GpuAssetBridge`；卸载队列和上传队列分离，GPU 卸载命令至少延迟一个渲染循环，在上一帧 `WaitFence` 后由 RenderThread 调用对应的 OpenGL `Destroy*`。Texture（2D、2DArray、Cubemap）、Shader、Mesh（VAO/VBO/IBO）、RenderTarget（四个 FrameBuffer）和 SkyBox（Equirect/三组 Cubemap）均使用 typed unload command，避免卸载期间再通过已删除的 Entry 查找句柄。
+
 这次 Mesh 迁移同时修复了三个加载问题：Skinned Mesh 不再在 CPU 阶段静默返回；VAO/VBO/IBO 任一创建或链接失败时会回滚已经创建的句柄；重复加载时会先清空旧的材质引用，再根据导入结果重新绑定材质。Mesh 现在同时保存 VAO、VBO、IBO 三个句柄，重载时可以成组回收旧 GPU 缓冲。
 
 RenderTarget 和 SkyBox 也使用同一套 RenderThread 上传路径：FrameBuffer 组或 IBL 纹理创建不完整时会清理已创建句柄，SkyBox 的 IBL 烘焙失败或收到卸载请求时会清理临时纹理，只有完整上传成功后才替换旧资源。
@@ -219,8 +221,8 @@ Material 反序列化现在会恢复 Shader 参数布局和 `Textures` 子节点
 
 ## 7. 后续必须修复的问题
 
-- `AssetHub::Release` 直接删除裸 `AssetEntry*`，仍需要后续增加引用计数和延迟回收。
-- `UnloadAsset` 不检查外部引用计数。
+- `AssetHub::Release` 仍直接删除裸 `AssetEntry*`；运行时卸载已经检查引用计数，下一阶段需要把 Entry map 的回收也改成引用计数和延迟回收。
+- 卸载队列目前只保证 GPU 句柄延后一帧销毁，Entry 本身仍保留在 map 中，下一阶段增加可回收 Entry 的扫描和重载复用策略。
 - Skinned Mesh 导入失败时可能长期停留在 CPULoading。
 - StbImage 的全局 flip 状态不适合并行导入。
 - HDR 图片检测后仍可能使用 8-bit 导入路径。
