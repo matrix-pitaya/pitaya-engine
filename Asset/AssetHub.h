@@ -123,42 +123,51 @@ namespace Pitaya::Asset
                 return false;
             }
 
-            typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = nullptr;
+            bool success = false;
+            bool hasGpuUnload = false;
+            Pitaya::Asset::AssetOperate unloadOperation;
             GetAssetEntryMap<T>().FindOperateKV(guid,
-                [&entry](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* value)
+                [this, &success, &hasGpuUnload, &unloadOperation, guid](Pitaya::Core::GUID,
+                    typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
                 {
-                    entry = value;
+                    if (!entry)
+                    {
+                        Pitaya::Log::Error("asset entry is empty GUID:" + guid.ToString());
+                        return;
+                    }
+                    if (entry->IsUnloadRequested())
+                    {
+                        success = true;
+                        return;
+                    }
+                    if (entry->RefCount.HasRef())
+                    {
+                        Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning,
+                            "can't unload asset while AssetRef is alive GUID:" + guid.ToString());
+                        return;
+                    }
+                    if (entry->IsLoading())
+                    {
+                        Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning,
+                            "can't unload asset while it is loading GUID:" + guid.ToString());
+                        return;
+                    }
+
+                    // 在 map 写锁内完成检查和状态切换，避免 LoadAsset 在中间插入引用
+                    // 或开始另一轮 generation。句柄快照随后交给 RenderThread 销毁。
+                    entry->RequestUnload();
+                    hasGpuUnload = BuildGpuUnload<T>(entry, unloadOperation);
+                    success = true;
                 },
-                [](Pitaya::Core::GUID) {});
-
-            if (!entry)
-            {
-                Pitaya::Log::Error("can't find asset entry GUID:" + guid.ToString());
-                return false;
-            }
-            if (entry->IsUnloadRequested())
-            {
-                return true;
-            }
-            if (entry->RefCount.HasRef())
-            {
-                Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning,
-                    "can't unload asset while AssetRef is alive GUID:" + guid.ToString());
-                return false;
-            }
-            if (entry->IsLoading())
-            {
-                Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning,
-                    "can't unload asset while it is loading GUID:" + guid.ToString());
-                return false;
-            }
-
-            // 先失效当前 generation，再快照句柄。RenderThread 看到旧的导入操作时
-            // 会直接丢弃结果；快照中的句柄由 GpuAssetBridge 在安全点销毁。
-            entry->RequestUnload();
-            QueueGpuUnload<T>(entry);
-            Pitaya::Log::Info("asset unload requested GUID:" + guid.ToString());
-            return true;
+                [guid](Pitaya::Core::GUID)
+                {
+                    Pitaya::Log::Error("can't find asset entry GUID:" + guid.ToString());
+                });
+            // 不能在 map 写锁内唤醒 Renderer：RenderThread 的顺序是 Renderer mutex
+            // -> Asset map，卸载线程反向调用会形成锁顺序死锁。
+            if (hasGpuUnload) { gpuAssetBridge.EnqueueUnload(std::move(unloadOperation)); }
+            if (success) { Pitaya::Log::Info("asset unload requested GUID:" + guid.ToString()); }
+            return success;
         }
 
     private:
@@ -230,11 +239,7 @@ namespace Pitaya::Asset
                     level = Pitaya::Log::LogLevel::Info;
                     asset = _entry;
 
-                    if (_entry->IsUnloadRequested() && _entry->HasLoadedData())
-                    {
-                        _entry->State.ClearBits(Pitaya::Core::AssetState::Unload);
-                    }
-                    else if (_entry->IsUnloadRequested() || _entry->IsFailed())
+                    if (_entry->IsUnloadRequested() || _entry->IsFailed())
                     {
                         _entry->PrepareReload();
                         generation = _entry->BeginLoadGeneration();
@@ -329,13 +334,13 @@ namespace Pitaya::Asset
         }
 
         template<AssetType T>
-        inline void QueueGpuUnload(typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
+        inline bool BuildGpuUnload(typename Pitaya::Core::AssetRef<T>::AssetEntry* entry,
+            Pitaya::Asset::AssetOperate& operation)
         {
-            if (!entry) { return; }
+            if (!entry) { return false; }
             T* data = entry->Data.load(std::memory_order_acquire);
-            if (!data) { return; }
+            if (!data) { return false; }
 
-            Pitaya::Asset::AssetOperate operation;
             bool hasGpuHandle = false;
             if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>)
             {
@@ -410,7 +415,7 @@ namespace Pitaya::Asset
                 }
             }
 
-            if (hasGpuHandle) { gpuAssetBridge.EnqueueUnload(std::move(operation)); }
+            return hasGpuHandle;
         }
 
     public:
