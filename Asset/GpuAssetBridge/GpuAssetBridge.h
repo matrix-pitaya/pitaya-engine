@@ -6,6 +6,8 @@ namespace Pitaya::Render
 }
 
 #include<Asset/Common/AssetOperate.h>
+#include<Asset/Common/FuncTable.h>
+#include<Asset/Common/Mesh.h>
 #include<Asset/Common/Shader.h>
 #include<Asset/Common/Texture.h>
 #include<Asset/Common/TextureUsage.h>
@@ -20,6 +22,7 @@ namespace Pitaya::Render
 #include<Thread/Common/ThreadType.h>
 
 #include<GPU/Common/FuncTable.h>
+#include<GPU/Frontend/Buffer/VertexArray.h>
 #include<GPU/Frontend/Shader/Shader.h>
 #include<Render/Common/FuncTable.h>
 #include<Log/Common/FuncTable.h>
@@ -53,6 +56,8 @@ namespace Pitaya::Asset
         using TextureEntryLookup = TextureEntry* (*)(void*, Pitaya::Core::GUID);
         using ShaderEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry;
         using ShaderEntryLookup = ShaderEntry* (*)(void*, Pitaya::Core::GUID);
+        using MeshEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry;
+        using MeshEntryLookup = MeshEntry* (*)(void*, Pitaya::Core::GUID);
 
         inline void Enqueue(const Pitaya::Asset::AssetOperate& operate)
         {
@@ -76,6 +81,12 @@ namespace Pitaya::Asset
         {
             shaderCallbackUserData = userData;
             shaderEntryLookup = lookup;
+        }
+
+        inline void SetMeshCallbacks(void* userData, MeshEntryLookup lookup)
+        {
+            meshCallbackUserData = userData;
+            meshEntryLookup = lookup;
         }
 
         template<typename Handler>
@@ -104,6 +115,14 @@ namespace Pitaya::Asset
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::ShaderImportResult>)
                             {
                                 ProcessShader(operation);
+                            }
+                            else if constexpr (std::is_same_v<Operation, Pitaya::Import::StaticMeshImportResult>)
+                            {
+                                ProcessStaticMesh(operation);
+                            }
+                            else if constexpr (std::is_same_v<Operation, Pitaya::Import::SkinnedMeshImportResult>)
+                            {
+                                ProcessSkinnedMesh(operation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Asset::Texture2DUnloadRequire>)
                             {
@@ -307,11 +326,166 @@ namespace Pitaya::Asset
             entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
         }
 
+        inline MeshEntry* FindMeshEntry(Pitaya::Core::GUID guid) const
+        {
+            return meshEntryLookup ? meshEntryLookup(meshCallbackUserData, guid) : nullptr;
+        }
+
+        inline bool BeginMeshUpload(Pitaya::Core::GUID guid, MeshEntry*& entry, const char* typeName)
+        {
+            entry = FindMeshEntry(guid);
+            if (!entry)
+            {
+                Pitaya::Log::Error("{} asset entry not found, GUID:{}", typeName, guid);
+                return false;
+            }
+            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            {
+                Pitaya::Log::Error("{} asset marked as unload, GUID:{}", typeName, guid);
+                return false;
+            }
+            entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
+            return true;
+        }
+
+        inline bool CreateMeshBuffers(const std::vector<float>& vertices, const std::vector<uint32_t>& indices,
+            const Pitaya::GPU::BufferLayout& layout,
+            Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle& vao,
+            Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle& vbo,
+            Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle& ibo)
+        {
+            vao = Pitaya::GPU::CreateVertexArray();
+            vbo = Pitaya::GPU::CreateVertexBuffer(vertices.data(), static_cast<uint32_t>(vertices.size() * sizeof(float)));
+            ibo = Pitaya::GPU::CreateIndexBuffer(indices.data(), static_cast<uint32_t>(indices.size()));
+            if (!vao || !vbo || !ibo || !Pitaya::GPU::LinkVertexArray(vao, vbo, ibo, layout))
+            {
+                if (vao) { Pitaya::GPU::DestroyVertexArray(vao); }
+                if (vbo) { Pitaya::GPU::DestroyVertexBuffer(vbo); }
+                if (ibo) { Pitaya::GPU::DestroyIndexBuffer(ibo); }
+                vao = Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle::Invalid;
+                vbo = Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle::Invalid;
+                ibo = Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle::Invalid;
+                return false;
+            }
+            return true;
+        }
+
+        inline void DestroyMeshBuffers(Pitaya::Asset::Mesh& mesh)
+        {
+            const auto vao = mesh.VertexArrayHandle;
+            if (!vao) { return; }
+
+            Pitaya::GPU::VertexArray vertexArray;
+            if (Pitaya::GPU::GetVertexArray(vao, vertexArray))
+            {
+                if (vertexArray.VertexBufferHandle) { Pitaya::GPU::DestroyVertexBuffer(vertexArray.VertexBufferHandle); }
+                if (vertexArray.IndexBufferHandle) { Pitaya::GPU::DestroyIndexBuffer(vertexArray.IndexBufferHandle); }
+            }
+            Pitaya::GPU::DestroyVertexArray(vao);
+            mesh.VertexArrayHandle = Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle::Invalid;
+        }
+
+        inline void ProcessStaticMesh(Pitaya::Import::StaticMeshImportResult& result)
+        {
+            MeshEntry* entry = nullptr;
+            if (!BeginMeshUpload(result.GUID, entry, "static mesh")) { return; }
+            if (!result.IsValid || result.Vertices.empty() || result.Indices.empty())
+            {
+                Pitaya::Log::Error("invalid static mesh CPU result, GUID:{}", result.GUID);
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            auto* mesh = entry->Data.load(std::memory_order_acquire);
+            if (!mesh)
+            {
+                Pitaya::Log::Error("static mesh asset data is empty, GUID:{}", result.GUID);
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle vao;
+            Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle vbo;
+            Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle ibo;
+            if (!CreateMeshBuffers(result.Vertices, result.Indices, result.VertexLayout, vao, vbo, ibo)
+                || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            {
+                if (vao) { Pitaya::GPU::DestroyVertexArray(vao); }
+                if (vbo) { Pitaya::GPU::DestroyVertexBuffer(vbo); }
+                if (ibo) { Pitaya::GPU::DestroyIndexBuffer(ibo); }
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            DestroyMeshBuffers(*mesh);
+            mesh->VertexArrayHandle = vao;
+            mesh->BoundingBox = result.BoundingBox;
+            mesh->SubMeshs = std::move(result.SubMeshs);
+            mesh->Materials.clear();
+            for (const auto& materialGUID : result.MaterialGUIDs)
+            {
+                mesh->Materials.emplace_back(Pitaya::Asset::LoadAsset<Pitaya::Asset::Material>(materialGUID));
+            }
+            mesh->Type = Pitaya::GPU::MeshType::Static;
+            Pitaya::Log::Info("successfully created GPU resources for static mesh GUID:{}", result.GUID);
+            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+        }
+
+        inline void ProcessSkinnedMesh(Pitaya::Import::SkinnedMeshImportResult& result)
+        {
+            MeshEntry* entry = nullptr;
+            if (!BeginMeshUpload(result.GUID, entry, "skinned mesh")) { return; }
+            if (!result.IsValid || result.Vertices.empty() || result.Indices.empty())
+            {
+                Pitaya::Log::Error("invalid skinned mesh CPU result, GUID:{}", result.GUID);
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            auto* mesh = entry->Data.load(std::memory_order_acquire);
+            if (!mesh)
+            {
+                Pitaya::Log::Error("skinned mesh asset data is empty, GUID:{}", result.GUID);
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle vao;
+            Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle vbo;
+            Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle ibo;
+            if (!CreateMeshBuffers(result.Vertices, result.Indices, result.VertexLayout, vao, vbo, ibo)
+                || entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            {
+                if (vao) { Pitaya::GPU::DestroyVertexArray(vao); }
+                if (vbo) { Pitaya::GPU::DestroyVertexBuffer(vbo); }
+                if (ibo) { Pitaya::GPU::DestroyIndexBuffer(ibo); }
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            DestroyMeshBuffers(*mesh);
+            mesh->VertexArrayHandle = vao;
+            mesh->SubMeshs = std::move(result.SubMeshs);
+            mesh->BoneInverseMatrices = std::move(result.BoneInverseMatrices);
+            mesh->BoneCount = result.BoneCount;
+            mesh->BoundingBox = result.BoundingBox;
+            mesh->Materials.clear();
+            for (const auto& materialGUID : result.MaterialGUIDs)
+            {
+                mesh->Materials.emplace_back(Pitaya::Asset::LoadAsset<Pitaya::Asset::Material>(materialGUID));
+            }
+            mesh->Type = Pitaya::GPU::MeshType::SkinnedMesh;
+            Pitaya::Log::Info("successfully created GPU resources for skinned mesh GUID:{}", result.GUID);
+            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+        }
+
     private:
         void* textureCallbackUserData = nullptr;
         TextureEntryLookup textureEntryLookup = nullptr;
         void* shaderCallbackUserData = nullptr;
         ShaderEntryLookup shaderEntryLookup = nullptr;
+        void* meshCallbackUserData = nullptr;
+        MeshEntryLookup meshEntryLookup = nullptr;
         Pitaya::Core::ThreadSafeQueue<Pitaya::Asset::AssetOperate> pendingOperations;
         std::queue<Pitaya::Asset::AssetOperate> renderOperations;
     };

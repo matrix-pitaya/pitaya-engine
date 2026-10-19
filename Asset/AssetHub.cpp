@@ -94,6 +94,22 @@ Pitaya::Asset::AssetHub::FindShaderEntryCallback(void* userData, Pitaya::Core::G
     return entry;
 }
 
+Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry*
+Pitaya::Asset::AssetHub::FindMeshEntryCallback(void* userData, Pitaya::Core::GUID guid)
+{
+    auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+    if (!assetHub) { return nullptr; }
+
+    Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
+    assetHub->meshes.FindOperateKV(guid,
+        [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* value)
+        {
+            entry = value;
+        },
+        [](Pitaya::Core::GUID) {});
+    return entry;
+}
+
 Pitaya::Import::ImportContext Pitaya::Asset::AssetHub::GetImportContext() noexcept
 {
     return Pitaya::Import::ImportContext{
@@ -125,6 +141,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
     RegisterBuiltinAssets();
     gpuAssetBridge.SetTextureCallbacks(this, &Pitaya::Asset::AssetHub::FindTextureEntryCallback);
     gpuAssetBridge.SetShaderCallbacks(this, &Pitaya::Asset::AssetHub::FindShaderEntryCallback);
+    gpuAssetBridge.SetMeshCallbacks(this, &Pitaya::Asset::AssetHub::FindMeshEntryCallback);
     const std::filesystem::path engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
     const std::filesystem::path projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
     if (!virtualFileSystem.Initialize(engineRoot, projectRoot))
@@ -675,183 +692,6 @@ void Pitaya::Asset::AssetHub::Release()
 void Pitaya::Asset::AssetHub::SyncAssetOperate(std::monostate&)
 {
     Pitaya::Log::Error("unknown cpu operate result");
-}
-void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::StaticMeshImportResult& cpuOpResult_Inner)
-{
-    std::string log;
-    Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
-    meshes.FindOperateKV(cpuOpResult_Inner.GUID,
-        [&log, &entry, &cpuOpResult_Inner](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* _entry)
-        {
-            if (!_entry)
-            {
-                log = "mesh asset entry is empty when GPU process CPU mesh load result GUID: " + _guid.ToString();
-                return;
-            }
-
-            if (_entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-            {
-                log = "mesh asset marked as Unload, abort GPU load: " + _guid.ToString();
-                return;
-            }
-
-            _entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
-            entry = _entry;
-        },
-        [&log](Pitaya::Core::GUID _guid)
-        {
-            log = "mesh asset entry not found when GPU process CPU mesh load result GUID: " + _guid.ToString();
-        });
-
-    if (!log.empty()) { Pitaya::Log::Error(log); }
-    if (!entry) { return; }
-
-    if (!cpuOpResult_Inner.IsValid || cpuOpResult_Inner.Vertices.empty() || cpuOpResult_Inner.Indices.empty())
-    {
-        Pitaya::Log::Error("Invalid CPU mesh data for GUID: " + cpuOpResult_Inner.GUID.ToString());
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        Pitaya::Log::Error("mesh asset marked as Unload, abort GPU load" + cpuOpResult_Inner.GUID.ToString());
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    auto* mesh = entry->Data.load(std::memory_order_acquire);
-    if (!mesh)
-    {
-        Pitaya::Log::Error("Failed to get mesh entry data GUID: " + cpuOpResult_Inner.GUID.ToString());
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    auto vaoHandle = Pitaya::GPU::CreateVertexArray();
-    auto vboHandle = Pitaya::GPU::CreateVertexBuffer(cpuOpResult_Inner.Vertices.data(), static_cast<uint32_t>(cpuOpResult_Inner.Vertices.size() * sizeof(float)));
-    auto iboHandle = Pitaya::GPU::CreateIndexBuffer(cpuOpResult_Inner.Indices.data(), static_cast<uint32_t>(cpuOpResult_Inner.Indices.size()));
-    if (!Pitaya::GPU::LinkVertexArray(vaoHandle, vboHandle, iboHandle, cpuOpResult_Inner.VertexLayout))
-    {
-        Pitaya::Log::Error("failed to link VAO GUID: " + cpuOpResult_Inner.GUID.ToString());
-        Pitaya::GPU::DestroyVertexArray(vaoHandle);
-        Pitaya::GPU::DestroyVertexBuffer(vboHandle);
-        Pitaya::GPU::DestroyIndexBuffer(iboHandle);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        Pitaya::Log::Error("StaticMesh marked as Unload during upload, cleaning up GPU resources: " + cpuOpResult_Inner.GUID.ToString());
-        Pitaya::GPU::DestroyVertexArray(vaoHandle);
-        Pitaya::GPU::DestroyVertexBuffer(vboHandle);
-        Pitaya::GPU::DestroyIndexBuffer(iboHandle);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    mesh->VertexArrayHandle = vaoHandle;
-    mesh->BoundingBox = cpuOpResult_Inner.BoundingBox;
-    mesh->SubMeshs = std::move(cpuOpResult_Inner.SubMeshs);
-    mesh->Type = Pitaya::GPU::MeshType::Static;
-    for (const auto& materialGUID : cpuOpResult_Inner.MaterialGUIDs)
-    {
-        mesh->Materials.emplace_back(Pitaya::Asset::LoadAsset<Pitaya::Asset::Material>(materialGUID));
-    }
-
-    Pitaya::Log::Info("Successfully created GPU resources for static mesh GUID: " + cpuOpResult_Inner.GUID.ToString());
-    entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
-}
-void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::SkinnedMeshImportResult& cpuOpResult_Inner)
-{
-    std::string log;
-    Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
-    meshes.FindOperateKV(cpuOpResult_Inner.GUID,
-        [&log, &entry, &cpuOpResult_Inner](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* _entry)
-        {
-            if (!_entry)
-            {
-                log = "mesh asset entry is empty when GPU process CPU mesh load result GUID: " + _guid.ToString();
-                return;
-            }
-
-            if (_entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-            {
-                log = "mesh asset marked as Unload, abort GPU load: " + _guid.ToString();
-                return;
-            }
-
-            _entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
-            entry = _entry;
-        },
-        [&log](Pitaya::Core::GUID _guid)
-        {
-            log = "mesh asset entry not found when GPU process CPU mesh load result GUID: " + _guid.ToString();
-        });
-
-    if (!log.empty()) { Pitaya::Log::Error(log); }
-    if (!entry) { return; }
-
-    if (!cpuOpResult_Inner.IsValid || cpuOpResult_Inner.Vertices.empty() || cpuOpResult_Inner.Indices.empty())
-    {
-        Pitaya::Log::Error("Invalid CPU skinned mesh data for GUID: " + cpuOpResult_Inner.GUID.ToString());
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        Pitaya::Log::Error("skinned mesh asset marked as Unload, abort GPU load" + cpuOpResult_Inner.GUID.ToString());
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    auto* mesh = entry->Data.load(std::memory_order_acquire);
-    if (!mesh)
-    {
-        Pitaya::Log::Error("Failed to get skinned mesh entry data GUID: " + cpuOpResult_Inner.GUID.ToString());
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    auto vaoHandle = Pitaya::GPU::CreateVertexArray();
-    auto vboHandle = Pitaya::GPU::CreateVertexBuffer(cpuOpResult_Inner.Vertices.data(), static_cast<uint32_t>(cpuOpResult_Inner.Vertices.size() * sizeof(float)));
-    auto iboHandle = Pitaya::GPU::CreateIndexBuffer(cpuOpResult_Inner.Indices.data(), static_cast<uint32_t>(cpuOpResult_Inner.Indices.size()));
-    if (!Pitaya::GPU::LinkVertexArray(vaoHandle, vboHandle, iboHandle, cpuOpResult_Inner.VertexLayout))
-    {
-        Pitaya::Log::Error("failed to link VAO GUID: " + cpuOpResult_Inner.GUID.ToString());
-        Pitaya::GPU::DestroyVertexArray(vaoHandle);
-        Pitaya::GPU::DestroyVertexBuffer(vboHandle);
-        Pitaya::GPU::DestroyIndexBuffer(iboHandle);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        Pitaya::Log::Error("SkinnedMesh marked as Unload during upload, cleaning up GPU resources: " + cpuOpResult_Inner.GUID.ToString());
-        Pitaya::GPU::DestroyVertexArray(vaoHandle);
-        Pitaya::GPU::DestroyVertexBuffer(vboHandle);
-        Pitaya::GPU::DestroyIndexBuffer(iboHandle);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    mesh->VertexArrayHandle = vaoHandle;
-    mesh->SubMeshs = std::move(cpuOpResult_Inner.SubMeshs);
-
-    mesh->BoneInverseMatrices = std::move(cpuOpResult_Inner.BoneInverseMatrices);
-    mesh->BoneCount = cpuOpResult_Inner.BoneCount;
-    mesh->BoundingBox = cpuOpResult_Inner.BoundingBox;
-    for (const auto& materialGUID : cpuOpResult_Inner.MaterialGUIDs)
-    {
-        mesh->Materials.emplace_back(Pitaya::Asset::LoadAsset<Pitaya::Asset::Material>(materialGUID));
-    }
-    mesh->Type = Pitaya::GPU::MeshType::SkinnedMesh;
-
-    Pitaya::Log::Info("successfully created GPU resources for skinned mesh GUID: " + cpuOpResult_Inner.GUID.ToString());
-    entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
 }
 void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::RenderTargetImportResult& cpuOpResult_Inner)
 {
@@ -1619,7 +1459,7 @@ void Pitaya::Asset::AssetHub::LoadMeshAsset(Pitaya::Core::GUID guid, const std::
         {	
             Pitaya::Log::Info("static mesh asset load success in cpu");
             Pitaya::Asset::AssetOperate cpuOpResult_Out;
-            cpuOpResult_Out.Data = cpuOpResult_Inner;
+            cpuOpResult_Out.Data = std::move(cpuOpResult_Inner);
             gpuAssetBridge.Enqueue(std::move(cpuOpResult_Out));
         }
         else
@@ -1631,7 +1471,18 @@ void Pitaya::Asset::AssetHub::LoadMeshAsset(Pitaya::Core::GUID guid, const std::
 
     if (preloadResult.Type == Pitaya::GPU::MeshType::SkinnedMesh)
     {
-        //TODO 加载SkinedMesh
+        Pitaya::Import::SkinnedMeshImportResult cpuOpResult_Inner;
+        if (LoadSkinnedMeshAsset(guid, file, preloadResult, cpuOpResult_Inner))
+        {
+            Pitaya::Log::Info("skinned mesh asset load success in cpu");
+            Pitaya::Asset::AssetOperate cpuOpResult_Out;
+            cpuOpResult_Out.Data = std::move(cpuOpResult_Inner);
+            gpuAssetBridge.Enqueue(std::move(cpuOpResult_Out));
+        }
+        else
+        {
+            Pitaya::Log::Error("skinned mesh load fail in cpu");
+        }
         return;
     }
 
@@ -1687,12 +1538,55 @@ bool Pitaya::Asset::AssetHub::LoadStaticMeshAsset(Pitaya::Core::GUID guid, const
     entry->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
     return true;
 }
-bool Pitaya::Asset::AssetHub::LoadSkinnedMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path, const Pitaya::Import::MeshPreloadResult& detectResult,Pitaya::Import::SkinnedMeshImportResult& out)
+bool Pitaya::Asset::AssetHub::LoadSkinnedMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path, const Pitaya::Import::MeshPreloadResult& detectResult, Pitaya::Import::SkinnedMeshImportResult& out)
 {
-    //TODO 加载骨骼动画
-    Pitaya::Log::Debug("current engine version cant load skinned mesh asset, TAT... GUID:" +
-        guid.ToString() + ".path:" + path.string());
-    return false;
+    std::string log;
+    std::string stringPath = path.string();
+    Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
+    meshes.FindOperateKV(guid,
+        [stringPath, &log, &entry](Pitaya::Core::GUID assetGuid, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* assetEntry)
+        {
+            if (!assetEntry)
+            {
+                log = "mesh asset entry is empty, GUID:" + assetGuid.ToString();
+                return;
+            }
+
+            if (assetEntry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            {
+                log = "skinned mesh asset marked as Unload, abort CPU load: " + stringPath;
+                assetEntry->State.SetBits(Pitaya::Core::AssetState::CPUFailed);
+                return;
+            }
+
+            assetEntry->State.SetBits(Pitaya::Core::AssetState::CPULoading);
+            entry = assetEntry;
+        },
+        [&log](Pitaya::Core::GUID assetGuid)
+        {
+            log = "mesh asset entry not found, GUID:" + assetGuid.ToString();
+        });
+
+    if (!log.empty()) { Pitaya::Log::Error(log); }
+    if (!entry) { return false; }
+
+    const auto importContext = GetImportContext();
+    if (!Pitaya::Import::Import(guid, path, detectResult, out, Pitaya::Import::MeshAPI::Assimp, &importContext))
+    {
+        Pitaya::Log::Error("skinned mesh load fail, GUID:" + guid.ToString() + ", path:" + stringPath);
+        entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading);
+        return false;
+    }
+
+    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+    {
+        Pitaya::Log::Error("skinned mesh asset marked as Unload, abort CPU load: " + stringPath);
+        entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading);
+        return false;
+    }
+
+    entry->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
+    return true;
 }
 
 void Pitaya::Asset::AssetHub::LoadMaterialAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file)

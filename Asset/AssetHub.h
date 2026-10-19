@@ -158,6 +158,8 @@ namespace Pitaya::Asset
             void* userData, Pitaya::Core::GUID guid);
         static Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* FindShaderEntryCallback(
             void* userData, Pitaya::Core::GUID guid);
+        static Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* FindMeshEntryCallback(
+            void* userData, Pitaya::Core::GUID guid);
 
         template<AssetType T>
         inline Pitaya::Core::AssetRef<T> FindAssetEntry(Pitaya::Core::GUID guid)
@@ -395,8 +397,6 @@ namespace Pitaya::Asset
 
     private:
         void SyncAssetOperate(std::monostate&);
-        void SyncAssetOperate(Pitaya::Import::StaticMeshImportResult&);
-        void SyncAssetOperate(Pitaya::Import::SkinnedMeshImportResult&);
         void SyncAssetOperate(Pitaya::Import::RenderTargetImportResult&);
         void SyncAssetOperate(Pitaya::Import::SkyBoxImportResult&);
 
