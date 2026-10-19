@@ -172,13 +172,15 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 - 删除 AssetHub 对 `PassKey<Renderer>` 的直接依赖。
 - 增加 GPU fence 和延迟销毁。
 
-当前已完成队列边界抽取：`GpuAssetBridge` 由 `AssetHub` 独占构造和管理，CPU/导入线程只调用 `Enqueue`；消费入口要求 `PassKey<Renderer>`，并在运行时校验当前线程确实是 Render 线程。Texture、Shader 和 Mesh 的 OpenGL 资源创建、更新和销毁已经由桥接层在该入口中执行，AssetHub 的 fallback handler 目前只保留 RenderTarget、SkyBox 以及未知操作。
+当前已完成队列边界抽取：`GpuAssetBridge` 由 `AssetHub` 独占构造和管理，CPU/导入线程只调用 `Enqueue`；消费入口要求 `PassKey<Renderer>`，并在运行时校验当前线程确实是 Render 线程。Texture、Shader、Mesh、RenderTarget 和 SkyBox 的 OpenGL 资源创建、更新和销毁已经由桥接层在该入口中执行，AssetHub 的 fallback handler 目前只保留未知操作。
 
 资产提交现在通过 Render FuncTable 调用 `Renderer::WakeupAssetUpload`，由 Renderer 在自身 mutex 下记录上传唤醒请求，再调用 `cond.notify_one()`；AssetHub 和 GpuAssetBridge 不直接访问 Renderer 的 mutex/condition_variable。这样即使后台没有新的 RenderPacket，异步资产提交也能可靠唤醒渲染线程。
 
-纹理、Shader 和 Mesh 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载、VF/VFG Shader 以及 Static/Skinned Mesh 都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。Framebuffer 和 SkyBox 暂时继续由 AssetHub 的 fallback handler 处理。
+纹理、Shader、Mesh、Framebuffer 和 SkyBox 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载、VF/VFG Shader、Static/Skinned Mesh、RenderTarget FrameBuffer 以及 SkyBox IBL 纹理都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。
 
 这次 Mesh 迁移同时修复了三个加载问题：Skinned Mesh 不再在 CPU 阶段静默返回；VAO/VBO/IBO 任一创建或链接失败时会回滚已经创建的句柄；重复加载时会先清空旧的材质引用，再根据导入结果重新绑定材质。
+
+RenderTarget 和 SkyBox 也使用同一套 RenderThread 上传路径：FrameBuffer 组或 IBL 纹理创建不完整时会清理已创建句柄，SkyBox 的 IBL 烘焙失败或收到卸载请求时会清理临时纹理，只有完整上传成功后才替换旧资源。
 
 OpenGL 的限制决定了这一步必须保留明确的线程边界：导入任务和 CPU 资源解析可以在线程池执行，但 OpenGL 对象的创建、更新和销毁只能由拥有当前 GL context 的渲染线程执行。目标流程是：
 

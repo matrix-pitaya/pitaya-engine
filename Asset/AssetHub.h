@@ -160,6 +160,10 @@ namespace Pitaya::Asset
             void* userData, Pitaya::Core::GUID guid);
         static Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* FindMeshEntryCallback(
             void* userData, Pitaya::Core::GUID guid);
+        static Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry* FindRenderTargetEntryCallback(
+            void* userData, Pitaya::Core::GUID guid);
+        static Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry* FindSkyBoxEntryCallback(
+            void* userData, Pitaya::Core::GUID guid);
 
         template<AssetType T>
         inline Pitaya::Core::AssetRef<T> FindAssetEntry(Pitaya::Core::GUID guid)
@@ -397,8 +401,6 @@ namespace Pitaya::Asset
 
     private:
         void SyncAssetOperate(std::monostate&);
-        void SyncAssetOperate(Pitaya::Import::RenderTargetImportResult&);
-        void SyncAssetOperate(Pitaya::Import::SkyBoxImportResult&);
 
     private:
         inline static constexpr const char* fileName = "asset.cfg";
