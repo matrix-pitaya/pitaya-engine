@@ -21,5 +21,6 @@ namespace Pitaya::Asset
 			Pitaya::Import::RenderTargetImportResult,
 			Pitaya::Import::SkyBoxImportResult,
 			Pitaya::Asset::Texture2DUnloadRequire> Data;
+		uint64_t Generation = 0;
 	};
 }

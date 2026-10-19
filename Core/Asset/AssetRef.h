@@ -18,6 +18,7 @@ namespace Pitaya::Core
         {
             std::atomic<T*> Data = nullptr;
             Pitaya::Core::GUID GUID;
+            std::atomic<uint64_t> LoadGeneration = 0;
             Pitaya::Core::AtomicRefCount RefCount;
             Pitaya::Core::AtomicStateFlags<AssetState> State = AssetState::Empty;
 
@@ -84,6 +85,7 @@ namespace Pitaya::Core
             inline void RequestUnload() noexcept
             {
                 State.SetBits(AssetState::Unload);
+                LoadGeneration.fetch_add(1, std::memory_order_acq_rel);
             }
             inline void PrepareReload() noexcept
             {
@@ -94,6 +96,16 @@ namespace Pitaya::Core
                 State.ClearBits(AssetState::GPULoading);
                 State.ClearBits(AssetState::GPULoaded);
                 State.ClearBits(AssetState::GPUFailed);
+            }
+
+            inline uint64_t BeginLoadGeneration() noexcept
+            {
+                return LoadGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+            }
+
+            inline bool IsLoadGeneration(uint64_t generation) const noexcept
+            {
+                return generation == 0 || LoadGeneration.load(std::memory_order_acquire) == generation;
             }
         };
 

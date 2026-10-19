@@ -205,10 +205,11 @@ namespace Pitaya::Asset
             std::string log;
             Pitaya::Log::LogLevel level = Pitaya::Log::LogLevel::Info;
             bool asyncLoad = false;
+            uint64_t generation = 0;
             typename Pitaya::Core::AssetRef<T> asset = nullptr;
             auto& map = GetAssetEntryMap<T>();
             map.FindOperateKVOrInsert(guid,
-                [&asset, &asyncLoad, &log, &level](Pitaya::Core::GUID _guid, typename Pitaya::Core::AssetRef<T>::AssetEntry* _entry)
+                [&asset, &asyncLoad, &generation, &log, &level](Pitaya::Core::GUID _guid, typename Pitaya::Core::AssetRef<T>::AssetEntry* _entry)
                 {
                     if (!_entry)
                     {
@@ -228,10 +229,11 @@ namespace Pitaya::Asset
                     else if (_entry->IsUnloadRequested() || _entry->IsFailed())
                     {
                         _entry->PrepareReload();
+                        generation = _entry->BeginLoadGeneration();
                         asyncLoad = true;
                     }
                 },
-                [&asset, &asyncLoad, &log, &level](Pitaya::Core::GUID _guid) -> std::optional<std::pair<Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry*>>
+                [&asset, &asyncLoad, &generation, &log, &level](Pitaya::Core::GUID _guid) -> std::optional<std::pair<Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry*>>
                 {
                     level = Pitaya::Log::LogLevel::Info;
                     log = "asset entry inexistence, create asset entry GUID:" + _guid.ToString();
@@ -240,35 +242,36 @@ namespace Pitaya::Asset
                     typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = Pitaya::Core::New<typename Pitaya::Core::AssetRef<T>::AssetEntry>();
                     entry->GUID = _guid;
                     entry->Data.store(Pitaya::Core::New<T>(), std::memory_order_release);
+                    generation = entry->BeginLoadGeneration();
                     entry->BeginCpuLoad();
                     asset = entry;
                     return std::make_pair(_guid, entry);
                 });
             Pitaya::Log::Write(level, log);
-            if (asyncLoad) { AsyncLoadAsset<T>(guid, resolvePath); }
+            if (asyncLoad) { AsyncLoadAsset<T>(guid, resolvePath, generation); }
             return asset;
         }
 
     private:
         template<AssetType T>
-        inline void AsyncLoadAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path)
+        inline void AsyncLoadAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path, uint64_t generation)
         {
             Pitaya::Task::PostJob(
-                [this, guid, path]()
+                [this, guid, path, generation]()
                 {
-                    if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { LoadTextureAsset(guid, path); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { LoadShaderAsset(guid, path); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { LoadMeshAsset(guid, path); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { LoadMaterialAsset(guid, path); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { LoadRenderTarget(guid, path); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { LoadSkyBoxAsset(guid, path); }
+                    if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { LoadTextureAsset(guid, path, generation); }
+                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { LoadShaderAsset(guid, path, generation); }
+                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { LoadMeshAsset(guid, path, generation); }
+                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { LoadMaterialAsset(guid, path, generation); }
+                    else if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { LoadRenderTarget(guid, path, generation); }
+                    else if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { LoadSkyBoxAsset(guid, path, generation); }
                     else { Pitaya::Log::Error("async load asset fail,GUID:" + guid.ToString() + " path:" + path.string()); }
 
                     typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = nullptr;
                     GetAssetEntryMap<T>().FindOperateKV(guid,
                         [&entry](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* value) { entry = value; },
                         [](Pitaya::Core::GUID) {});
-                    if (entry && entry->State.HasBits(Pitaya::Core::AssetState::CPULoading))
+                    if (entry && entry->IsLoadGeneration(generation) && entry->State.HasBits(Pitaya::Core::AssetState::CPULoading))
                     {
                         entry->FailCpuLoad();
                         Pitaya::Log::Error("asset CPU load did not complete GUID:" + guid.ToString());
@@ -293,6 +296,28 @@ namespace Pitaya::Asset
             if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { return materials; }
             if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { return rendertargets; }
             if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { return skyboxes; }
+        }
+
+        template<AssetType T>
+        inline bool IsCurrentLoadGeneration(Pitaya::Core::GUID guid, uint64_t generation)
+        {
+            bool current = false;
+            GetAssetEntryMap<T>().FindOperateKV(guid,
+                [&current, generation](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
+                {
+                    current = entry && entry->IsLoadGeneration(generation);
+                },
+                [](Pitaya::Core::GUID) {});
+            return current;
+        }
+
+        template<typename Result>
+        inline void EnqueueAssetOperate(Result&& result, uint64_t generation)
+        {
+            Pitaya::Asset::AssetOperate operation;
+            operation.Data = std::forward<Result>(result);
+            operation.Generation = generation;
+            gpuAssetBridge.Enqueue(std::move(operation));
         }
 
     public:
@@ -341,30 +366,30 @@ namespace Pitaya::Asset
         //TODO 实现函数 强制遍历所有资源，判断能否销毁
 
     private:
-        void LoadTextureAsset(Core::GUID guid, const std::filesystem::path& path);
-        bool LoadTexture2DAsset(Core::GUID guid, const std::filesystem::path& path, Pitaya::Import::Texture2DImportResult& result);
-        bool LoadTextureCubemapAsset(Core::GUID guid, const std::filesystem::path& path, const std::vector<std::filesystem::path>& paths, Pitaya::Import::TextureCubemapImportResult& result);
+        void LoadTextureAsset(Core::GUID guid, const std::filesystem::path& path, uint64_t generation);
+        bool LoadTexture2DAsset(Core::GUID guid, const std::filesystem::path& path, uint64_t generation, Pitaya::Import::Texture2DImportResult& result);
+        bool LoadTextureCubemapAsset(Core::GUID guid, const std::filesystem::path& path, const std::vector<std::filesystem::path>& paths, uint64_t generation, Pitaya::Import::TextureCubemapImportResult& result);
 
     private:
-        void LoadShaderAsset(Core::GUID guid, const std::filesystem::path& folder);
+        void LoadShaderAsset(Core::GUID guid, const std::filesystem::path& folder, uint64_t generation);
         bool LoadVFShaderAsset(Core::GUID guid, const std::filesystem::path& folder, const std::filesystem::path& vertexPath,
-            const std::filesystem::path& fragmentPath, Pitaya::Import::ShaderImportResult& cpuOpResult_Inner);
+            const std::filesystem::path& fragmentPath, uint64_t generation, Pitaya::Import::ShaderImportResult& cpuOpResult_Inner);
         bool LoadVFGShaderAsset(Core::GUID guid, const std::filesystem::path& folder, const std::filesystem::path& vertexPath,
-            const std::filesystem::path& fragmentPath, const std::filesystem::path& geometry, Pitaya::Import::ShaderImportResult& cpuOpResult_Inner);
+            const std::filesystem::path& fragmentPath, const std::filesystem::path& geometry, uint64_t generation, Pitaya::Import::ShaderImportResult& cpuOpResult_Inner);
 
     private:
-        void LoadMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file);
-        bool LoadStaticMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& detectResult, Pitaya::Import::StaticMeshImportResult& out);
-        bool LoadSkinnedMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& detectResult, Pitaya::Import::SkinnedMeshImportResult& out);
+        void LoadMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file, uint64_t generation);
+        bool LoadStaticMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& detectResult, uint64_t generation, Pitaya::Import::StaticMeshImportResult& out);
+        bool LoadSkinnedMeshAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file, const Pitaya::Import::MeshPreloadResult& detectResult, uint64_t generation, Pitaya::Import::SkinnedMeshImportResult& out);
 
     private:
-        void LoadMaterialAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file);
+        void LoadMaterialAsset(Pitaya::Core::GUID guid, const std::filesystem::path& file, uint64_t generation);
 
     private:
-        void LoadRenderTarget(Pitaya::Core::GUID guid, const std::filesystem::path& file);
+        void LoadRenderTarget(Pitaya::Core::GUID guid, const std::filesystem::path& file, uint64_t generation);
 
     private:
-        void LoadSkyBoxAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path);
+        void LoadSkyBoxAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path, uint64_t generation);
 
     private:
         bool CheckIsVirtualPath(const std::filesystem::path& path) const;
