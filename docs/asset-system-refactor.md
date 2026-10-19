@@ -176,7 +176,7 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 资产提交现在通过 Render FuncTable 调用 `Renderer::WakeupAssetUpload`，由 Renderer 在自身 mutex 下记录上传唤醒请求，再调用 `cond.notify_one()`；AssetHub 和 GpuAssetBridge 不直接访问 Renderer 的 mutex/condition_variable。这样即使后台没有新的 RenderPacket，异步资产提交也能可靠唤醒渲染线程。
 
-纹理上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap 和 Texture2D 卸载都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 Texture Entry 查找回调。Shader、Mesh、Framebuffer 和 SkyBox 暂时继续由 AssetHub 的 fallback handler 处理。
+纹理和 Shader 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载以及 VF/VFG Shader 都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。Mesh、Framebuffer 和 SkyBox 暂时继续由 AssetHub 的 fallback handler 处理。
 
 OpenGL 的限制决定了这一步必须保留明确的线程边界：导入任务和 CPU 资源解析可以在线程池执行，但 OpenGL 对象的创建、更新和销毁只能由拥有当前 GL context 的渲染线程执行。目标流程是：
 

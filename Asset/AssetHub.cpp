@@ -78,6 +78,22 @@ Pitaya::Asset::AssetHub::FindTextureEntryCallback(void* userData, Pitaya::Core::
     return entry;
 }
 
+Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry*
+Pitaya::Asset::AssetHub::FindShaderEntryCallback(void* userData, Pitaya::Core::GUID guid)
+{
+    auto* assetHub = static_cast<Pitaya::Asset::AssetHub*>(userData);
+    if (!assetHub) { return nullptr; }
+
+    Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* entry = nullptr;
+    assetHub->shaders.FindOperateKV(guid,
+        [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* value)
+        {
+            entry = value;
+        },
+        [](Pitaya::Core::GUID) {});
+    return entry;
+}
+
 Pitaya::Import::ImportContext Pitaya::Asset::AssetHub::GetImportContext() noexcept
 {
     return Pitaya::Import::ImportContext{
@@ -108,6 +124,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
 {
     RegisterBuiltinAssets();
     gpuAssetBridge.SetTextureCallbacks(this, &Pitaya::Asset::AssetHub::FindTextureEntryCallback);
+    gpuAssetBridge.SetShaderCallbacks(this, &Pitaya::Asset::AssetHub::FindShaderEntryCallback);
     const std::filesystem::path engineRoot = Pitaya::Core::GetExecutableDirectory() / "resource";
     const std::filesystem::path projectRoot = Pitaya::Core::GetWorkspace() / "Asset" / "Resource";
     if (!virtualFileSystem.Initialize(engineRoot, projectRoot))
@@ -658,84 +675,6 @@ void Pitaya::Asset::AssetHub::Release()
 void Pitaya::Asset::AssetHub::SyncAssetOperate(std::monostate&)
 {
     Pitaya::Log::Error("unknown cpu operate result");
-}
-void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::ShaderImportResult& cpuOpResult_Inner)
-{
-    char log[1024] = {};
-    Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* entry = nullptr;
-    shaders.FindOperateKV(cpuOpResult_Inner.GUID,
-        [&](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* _entry)
-        {
-            if (!_entry) { std::format_to_n(log, sizeof(log), "Shader AssetEntry Is Empty when GPU Process CPU Shader Load Result GUID: {}", _guid); return; }
-            if (_entry->State.HasBits(Pitaya::Core::AssetState::Unload)) { std::format_to_n(log, sizeof(log), "Shader asset marked as Unload, abort GPU load GUID: {}", _guid); return; }
-            _entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
-            entry = _entry;
-        },
-        [&](Pitaya::Core::GUID _guid)
-        {
-            std::format_to_n(log, sizeof(log), "Shader AssetEntry not found when GPU Process CPU Shader Load Result GUID: {}", _guid);
-        });
-    if (log[0] != '\0') { Pitaya::Log::Error(log); }
-    if (!entry) { return; }
-
-    auto* shader = entry->Data.load(std::memory_order_acquire);
-    if (!shader)
-    {
-        Pitaya::Log::Error("Shader asset entry data is Empty! GUID: {}", cpuOpResult_Inner.GUID);
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        return;
-    }
-
-    auto shaderHandle = Pitaya::Core::SlotMap<Pitaya::GPU::Shader>::Handle::Invalid;
-    if (cpuOpResult_Inner.Type == Pitaya::GPU::Shader::VF)
-    {
-        if (!cpuOpResult_Inner.VertexSource.empty() && !cpuOpResult_Inner.FragmentSource.empty())
-        {
-            shaderHandle = Pitaya::GPU::CreateShader(cpuOpResult_Inner.VertexSource.c_str(), cpuOpResult_Inner.VertexSource.size(), cpuOpResult_Inner.FragmentSource.c_str(), cpuOpResult_Inner.FragmentSource.size());
-        }
-        else
-        {
-            Pitaya::Log::Error("cpu load shader result is empty GUID: {}", cpuOpResult_Inner.GUID);
-        }
-    }
-    else if (cpuOpResult_Inner.Type == Pitaya::GPU::Shader::VFG)
-    {
-        if (!cpuOpResult_Inner.VertexSource.empty() && !cpuOpResult_Inner.FragmentSource.empty() && !cpuOpResult_Inner.GeometrySource.empty())
-        {
-            shaderHandle = Pitaya::GPU::CreateShader(cpuOpResult_Inner.VertexSource.c_str(), cpuOpResult_Inner.VertexSource.size(), cpuOpResult_Inner.FragmentSource.c_str(), cpuOpResult_Inner.FragmentSource.size(), cpuOpResult_Inner.GeometrySource.c_str(), cpuOpResult_Inner.GeometrySource.size());
-        }
-        else
-        {
-            Pitaya::Log::Error("cpu load shader result is empty GUID: {}", cpuOpResult_Inner.GUID);
-        }
-    }
-    else
-    {
-        Pitaya::Log::Error("erro shader type GUID: {}", cpuOpResult_Inner.GUID);
-    }
-
-    //无效句柄未加载GPU数据
-    if (!shaderHandle)
-    {
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        Pitaya::Log::Error("cpu load shader result is empty GUID: {}", cpuOpResult_Inner.GUID);
-        return;
-    }
-
-    if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
-    {
-        entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
-        Pitaya::Log::Error("Shader asset marked as Unload, abort GPU load GUID: {}", cpuOpResult_Inner.GUID);
-        if (!Pitaya::GPU::DestroyShader(shaderHandle))
-        {
-            Pitaya::Log::Error("Shader asset destroy fali GUID:{}", cpuOpResult_Inner.GUID);
-        }
-        return;
-    }
-
-    Pitaya::Log::Info("shader gpu load success, GUID: {}", cpuOpResult_Inner.GUID);
-    entry->Data.load(std::memory_order_acquire)->ShaderHandle = shaderHandle;
-    entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
 }
 void Pitaya::Asset::AssetHub::SyncAssetOperate(Pitaya::Import::StaticMeshImportResult& cpuOpResult_Inner)
 {

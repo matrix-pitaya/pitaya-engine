@@ -6,6 +6,7 @@ namespace Pitaya::Render
 }
 
 #include<Asset/Common/AssetOperate.h>
+#include<Asset/Common/Shader.h>
 #include<Asset/Common/Texture.h>
 #include<Asset/Common/TextureUsage.h>
 
@@ -19,6 +20,7 @@ namespace Pitaya::Render
 #include<Thread/Common/ThreadType.h>
 
 #include<GPU/Common/FuncTable.h>
+#include<GPU/Frontend/Shader/Shader.h>
 #include<Render/Common/FuncTable.h>
 #include<Log/Common/FuncTable.h>
 
@@ -49,6 +51,8 @@ namespace Pitaya::Asset
     private:
         using TextureEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry;
         using TextureEntryLookup = TextureEntry* (*)(void*, Pitaya::Core::GUID);
+        using ShaderEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry;
+        using ShaderEntryLookup = ShaderEntry* (*)(void*, Pitaya::Core::GUID);
 
         inline void Enqueue(const Pitaya::Asset::AssetOperate& operate)
         {
@@ -66,6 +70,12 @@ namespace Pitaya::Asset
         {
             textureCallbackUserData = userData;
             textureEntryLookup = lookup;
+        }
+
+        inline void SetShaderCallbacks(void* userData, ShaderEntryLookup lookup)
+        {
+            shaderCallbackUserData = userData;
+            shaderEntryLookup = lookup;
         }
 
         template<typename Handler>
@@ -90,6 +100,10 @@ namespace Pitaya::Asset
                             else if constexpr (std::is_same_v<Operation, Pitaya::Import::TextureCubemapImportResult>)
                             {
                                 ProcessTextureCubemap(operation);
+                            }
+                            else if constexpr (std::is_same_v<Operation, Pitaya::Import::ShaderImportResult>)
+                            {
+                                ProcessShader(operation);
                             }
                             else if constexpr (std::is_same_v<Operation, Pitaya::Asset::Texture2DUnloadRequire>)
                             {
@@ -225,9 +239,79 @@ namespace Pitaya::Asset
             Pitaya::GPU::DestroyTexture2D(operation.Texture2DHandle);
         }
 
+        inline ShaderEntry* FindShaderEntry(Pitaya::Core::GUID guid) const
+        {
+            return shaderEntryLookup ? shaderEntryLookup(shaderCallbackUserData, guid) : nullptr;
+        }
+
+        inline void ProcessShader(Pitaya::Import::ShaderImportResult& result)
+        {
+            ShaderEntry* entry = FindShaderEntry(result.GUID);
+            if (!entry)
+            {
+                Pitaya::Log::Error("shader asset entry not found, GUID:{}", result.GUID);
+                return;
+            }
+            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            {
+                Pitaya::Log::Error("shader asset marked as unload, GUID:{}", result.GUID);
+                return;
+            }
+            entry->State.SetBits(Pitaya::Core::AssetState::GPULoading);
+
+            auto* shader = entry->Data.load(std::memory_order_acquire);
+            if (!shader)
+            {
+                Pitaya::Log::Error("shader asset data is empty, GUID:{}", result.GUID);
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            Pitaya::Core::SlotMap<Pitaya::GPU::Shader>::Handle handle =
+                Pitaya::Core::SlotMap<Pitaya::GPU::Shader>::Handle::Invalid;
+            if (result.Type == Pitaya::GPU::Shader::VF && !result.VertexSource.empty() && !result.FragmentSource.empty())
+            {
+                handle = Pitaya::GPU::CreateShader(result.VertexSource.c_str(), result.VertexSource.size(),
+                    result.FragmentSource.c_str(), result.FragmentSource.size());
+            }
+            else if (result.Type == Pitaya::GPU::Shader::VFG && !result.VertexSource.empty()
+                && !result.FragmentSource.empty() && !result.GeometrySource.empty())
+            {
+                handle = Pitaya::GPU::CreateShader(result.VertexSource.c_str(), result.VertexSource.size(),
+                    result.FragmentSource.c_str(), result.FragmentSource.size(), result.GeometrySource.c_str(),
+                    result.GeometrySource.size());
+            }
+            else
+            {
+                Pitaya::Log::Error("invalid shader CPU result, GUID:{}", result.GUID);
+            }
+
+            if (!handle)
+            {
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            if (entry->State.HasBits(Pitaya::Core::AssetState::Unload))
+            {
+                if (!Pitaya::GPU::DestroyShader(handle))
+                {
+                    Pitaya::Log::Error("failed to destroy aborted shader GPU resource, GUID:{}", result.GUID);
+                }
+                entry->State.ModifyBits(Pitaya::Core::AssetState::GPUFailed, Pitaya::Core::AssetState::GPULoading);
+                return;
+            }
+
+            shader->ShaderHandle = handle;
+            Pitaya::Log::Info("successfully created GPU resources for shader GUID:{}", result.GUID);
+            entry->State.ModifyBits(Pitaya::Core::AssetState::GPULoaded, Pitaya::Core::AssetState::GPULoading);
+        }
+
     private:
         void* textureCallbackUserData = nullptr;
         TextureEntryLookup textureEntryLookup = nullptr;
+        void* shaderCallbackUserData = nullptr;
+        ShaderEntryLookup shaderEntryLookup = nullptr;
         Pitaya::Core::ThreadSafeQueue<Pitaya::Asset::AssetOperate> pendingOperations;
         std::queue<Pitaya::Asset::AssetOperate> renderOperations;
     };
