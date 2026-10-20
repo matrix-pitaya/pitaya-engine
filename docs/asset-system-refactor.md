@@ -192,6 +192,8 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 卸载提交时还会清理 Mesh 的材质引用和 CPU 几何缓存，以及 Material 的 Shader、Texture 引用和参数数组；Entry/Data 容器保留用于重载，依赖 AssetRef 会立即释放，避免一次卸载把整条依赖链永久钉在内存中。
 
+每次 RenderThread 消费 GPU 操作后，AssetHub 会按固定预算扫描卸载 Entry。只有已经请求卸载、没有外部引用且不在加载中的 Entry 才会从 map 移除并释放 Data；旧 generation 操作只会被丢弃，后续同 GUID 加载会创建新的 generation。
+
 这次 Mesh 迁移同时修复了三个加载问题：Skinned Mesh 不再在 CPU 阶段静默返回；VAO/VBO/IBO 任一创建或链接失败时会回滚已经创建的句柄；重复加载时会先清空旧的材质引用，再根据导入结果重新绑定材质。Mesh 现在同时保存 VAO、VBO、IBO 三个句柄，重载时可以成组回收旧 GPU 缓冲。
 
 RenderTarget 和 SkyBox 也使用同一套 RenderThread 上传路径：FrameBuffer 组或 IBL 纹理创建不完整时会清理已创建句柄，SkyBox 的 IBL 烘焙失败或收到卸载请求时会清理临时纹理，只有完整上传成功后才替换旧资源。
