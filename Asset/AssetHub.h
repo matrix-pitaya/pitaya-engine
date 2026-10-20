@@ -25,6 +25,8 @@
 #include<Asset/GpuAssetBridge/GpuAssetBridge.h>
 #include<Asset/VirtualFileSystem/VirtualFileSystem.h>
 
+#include<mutex>
+
 namespace Pitaya::Asset
 {
     class AssetHub
@@ -338,6 +340,7 @@ namespace Pitaya::Asset
             Pitaya::Asset::AssetOperate& operation)
         {
             if (!entry) { return false; }
+            std::lock_guard<std::mutex> lifecycleLock(entry->LifecycleMutex);
             T* data = entry->Data.load(std::memory_order_acquire);
             if (!data) { return false; }
 

@@ -178,11 +178,15 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 请求卸载也会使当前 generation 失效，因此卸载和重载之间排队的旧 CPU/GPU 操作不会重新写入资源状态。
 
+卸载会同时清除 `GPULoading/GPULoaded` 标志。后续再次 `LoadAsset` 时，Entry 无条件进入 `PrepareReload()` 和新的 generation，不能把已经清空 GPU 句柄的 Data 当作仍然可用的已加载资源。
+
 引擎关闭顺序现在先停止任务调度器和渲染线程，再释放 RenderPipeline、AssetHub，最后释放 RHIDevice；任务调度器在停止态拒绝新的作业，避免退出阶段又提交资产导入任务。渲染线程退出时仍然拥有有效的 OpenGL context，可以完成 GPU 资源清理。
 
 资产提交现在通过 Render FuncTable 调用 `Renderer::WakeupAssetUpload`，由 Renderer 在自身 mutex 下记录上传唤醒请求，再调用 `cond.notify_one()`；AssetHub 和 GpuAssetBridge 不直接访问 Renderer 的 mutex/condition_variable。这样即使后台没有新的 RenderPacket，异步资产提交也能可靠唤醒渲染线程。
 
 纹理、Shader、Mesh、Framebuffer 和 SkyBox 上传处理器已经迁移到 `GpuAssetBridge`：Texture2D、Cubemap、Texture2D 卸载、VF/VFG Shader、Static/Skinned Mesh、RenderTarget FrameBuffer 以及 SkyBox IBL 纹理都在桥接层的 RenderThread 分派中执行，AssetHub 只提供 typed Entry 查找回调。
+
+热重载时 Texture2D、Cubemap 和 Shader 会先在 RenderThread 创建新对象，再替换 Entry 中的句柄并销毁旧对象；Mesh、RenderTarget 和 SkyBox 使用同样的替换策略。Entry 的生命周期锁保护 GPU 句柄快照和提交，避免游戏线程卸载与 RenderThread 上传同时读写句柄。
 
 运行时卸载现在要求没有存活的外部 `AssetRef`，并拒绝在 CPU/GPU 加载过程中卸载。`AssetHub::UnloadAsset<T>` 先递增 generation 使旧上传结果失效，再把 GPU 句柄快照提交给 `GpuAssetBridge`；卸载队列和上传队列分离，GPU 卸载命令至少延迟一个渲染循环，在上一帧 `WaitFence` 后由 RenderThread 调用对应的 OpenGL `Destroy*`。Texture（2D、2DArray、Cubemap）、Shader、Mesh（VAO/VBO/IBO）、RenderTarget（四个 FrameBuffer）和 SkyBox（Equirect/三组 Cubemap）均使用 typed unload command，避免卸载期间再通过已删除的 Entry 查找句柄。
 

@@ -6,6 +6,7 @@
 #include<Core/Asset/AssetState.h>
 
 #include<atomic>
+#include<mutex>
 #include<stdexcept>
 
 namespace Pitaya::Core
@@ -21,6 +22,9 @@ namespace Pitaya::Core
             std::atomic<uint64_t> LoadGeneration = 0;
             Pitaya::Core::AtomicRefCount RefCount;
             Pitaya::Core::AtomicStateFlags<AssetState> State = AssetState::Empty;
+            // CPU 线程可能请求卸载，而 RenderThread 同时提交新的 GPU 句柄。
+            // 句柄快照和替换必须通过同一把锁完成。
+            mutable std::mutex LifecycleMutex;
 
             inline bool IsCpuReady() const noexcept
             {
@@ -85,6 +89,8 @@ namespace Pitaya::Core
             inline void RequestUnload() noexcept
             {
                 State.SetBits(AssetState::Unload);
+                State.ClearBits(AssetState::GPULoading);
+                State.ClearBits(AssetState::GPULoaded);
                 LoadGeneration.fetch_add(1, std::memory_order_acq_rel);
             }
             inline void PrepareReload() noexcept
