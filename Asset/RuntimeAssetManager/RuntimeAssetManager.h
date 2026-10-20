@@ -14,9 +14,15 @@
 #include<Asset/Common/Shader.h>
 #include<Asset/Common/Texture.h>
 
+#include<Task/Common/FuncTable.h>
+#include<Log/Common/FuncTable.h>
+
 #include<cstdint>
+#include<filesystem>
 #include<algorithm>
 #include<optional>
+#include<string>
+#include<utility>
 
 namespace Pitaya::Asset
 {
@@ -118,6 +124,34 @@ namespace Pitaya::Asset
             remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::Material>(remaining));
             remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::RenderTarget>(remaining));
             remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::SkyBox>(remaining));
+        }
+
+        template<AssetType T, typename Loader>
+        inline void ScheduleLoad(Pitaya::Core::GUID guid, const std::filesystem::path& path,
+            uint64_t generation, Loader&& loader)
+        {
+            auto load = std::forward<Loader>(loader);
+            Pitaya::Task::PostJob(
+                [this, guid, path, generation, load = std::move(load)]() mutable
+                {
+                    load(guid, path, generation);
+
+                    typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = nullptr;
+                    GetAssetEntryMap<T>().FindOperateKV(guid,
+                        [&entry](Pitaya::Core::GUID,
+                            typename Pitaya::Core::AssetRef<T>::AssetEntry* value)
+                        {
+                            entry = value;
+                        },
+                        [](Pitaya::Core::GUID) {});
+                    if (entry && entry->IsLoadGeneration(generation)
+                        && entry->State.HasBits(Pitaya::Core::AssetState::CPULoading))
+                    {
+                        entry->FailCpuLoad();
+                        Pitaya::Log::Error("asset CPU load did not complete GUID:" + guid.ToString());
+                    }
+                },
+                "Async Load Asset path: " + path.string() + " GUID: " + guid.ToString());
         }
 
         template<AssetType T>

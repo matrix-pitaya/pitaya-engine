@@ -174,8 +174,7 @@ namespace Pitaya::Asset
             }
 
             auto unloadResult = runtimeAssetManager.RequestUnload<T>(guid);
-            // 不能在 map 写锁内唤醒 Renderer：RenderThread 的顺序是 Renderer mutex
-            // -> Asset map，卸载线程反向调用会形成锁顺序死锁。
+            // RuntimeAssetManager 只返回已快照的句柄，GPU 命令仍由桥接层排队到 RenderThread。
             if (unloadResult.HasGpuOperation) { gpuAssetBridge.EnqueueUnload(std::move(unloadResult.Operation)); }
             if (unloadResult.Success) { Pitaya::Log::Info("asset unload requested GUID:" + guid.ToString()); }
             return unloadResult.Success;
@@ -236,35 +235,20 @@ namespace Pitaya::Asset
                 Pitaya::Log::Error("asset entry allocation failed GUID:" + guid.ToString());
                 return nullptr;
             }
-            if (acquired.ShouldLoad) { AsyncLoadAsset<T>(guid, resolvePath, acquired.Generation); }
-            return std::move(acquired.Asset);
-        }
-
-    private:
-        template<AssetType T>
-        inline void AsyncLoadAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path, uint64_t generation)
-        {
-            Pitaya::Task::PostJob(
-                [this, guid, path, generation]()
-                {
-                    if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { LoadTextureAsset(guid, path, generation); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { LoadShaderAsset(guid, path, generation); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { LoadMeshAsset(guid, path, generation); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { LoadMaterialAsset(guid, path, generation); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { LoadRenderTarget(guid, path, generation); }
-                    else if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { LoadSkyBoxAsset(guid, path, generation); }
-                    else { Pitaya::Log::Error("async load asset fail,GUID:" + guid.ToString() + " path:" + path.string()); }
-
-                    typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = nullptr;
-                    GetAssetEntryMap<T>().FindOperateKV(guid,
-                        [&entry](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* value) { entry = value; },
-                        [](Pitaya::Core::GUID) {});
-                    if (entry && entry->IsLoadGeneration(generation) && entry->State.HasBits(Pitaya::Core::AssetState::CPULoading))
+            if (acquired.ShouldLoad)
+            {
+                runtimeAssetManager.ScheduleLoad<T>(guid, resolvePath, acquired.Generation,
+                    [this](Pitaya::Core::GUID loadGuid, const std::filesystem::path& loadPath, uint64_t loadGeneration)
                     {
-                        entry->FailCpuLoad();
-                        Pitaya::Log::Error("asset CPU load did not complete GUID:" + guid.ToString());
-                    }
-                }, "Async Load Asset path: " + path.string() + " GUID: " + guid.ToString());
+                        if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { LoadTextureAsset(loadGuid, loadPath, loadGeneration); }
+                        else if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { LoadShaderAsset(loadGuid, loadPath, loadGeneration); }
+                        else if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { LoadMeshAsset(loadGuid, loadPath, loadGeneration); }
+                        else if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { LoadMaterialAsset(loadGuid, loadPath, loadGeneration); }
+                        else if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { LoadRenderTarget(loadGuid, loadPath, loadGeneration); }
+                        else if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { LoadSkyBoxAsset(loadGuid, loadPath, loadGeneration); }
+                    });
+            }
+            return std::move(acquired.Asset);
         }
 
     public:
