@@ -226,6 +226,7 @@ Material 反序列化现在会恢复 Shader 参数布局和 `Textures` 子节点
 ## 7. 后续必须修复的问题
 
 - `AssetHub::Release` 现在先抽离所有 Entry、清空 Data，再按引用计数删除 Entry；仍被外部 `AssetRef` 持有的 Entry 会保留空 Data，避免引擎退出后的引用析构访问悬空内存。下一阶段可以增加全局生命周期令牌，让这些 shutdown-retained Entry 在最后一个引用释放时回收。
+- 内置资产 Entry 现在也是独立的堆控制块。无外部引用时由 `BuiltinAssetStorage` 释放；仍被引用时从 AssetHub 脱离并保留空 Data，避免内嵌成员随 AssetHub 销毁后让内置 `AssetRef` 悬空。
 - 运行时卸载队列目前只保证 GPU 句柄延后一帧销毁，Entry 本身仍保留在 map 中，下一阶段增加可回收 Entry 的扫描和重载复用策略。
 - Skinned Mesh 导入失败时可能长期停留在 CPULoading。
 - StbImage 的全局 flip 状态不适合并行导入。

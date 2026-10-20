@@ -62,16 +62,47 @@ namespace Pitaya::Asset
     private:
         struct BuiltinAssetStorage
         {
-            Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry White;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry Black;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry FlatNormal;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry PBRStaticShader;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry PBRSkinnedShader;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Material>::AssetEntry PBRMaterial;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry Cube;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry Panel;
-            Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry Sphere;
-            Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry DefaultSkyBox;
+            using TextureEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry;
+            using ShaderEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry;
+            using MaterialEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Material>::AssetEntry;
+            using MeshEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry;
+            using SkyBoxEntry = Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry;
+
+            TextureEntry* White = PITAYA_NEW(TextureEntry);
+            TextureEntry* Black = PITAYA_NEW(TextureEntry);
+            TextureEntry* FlatNormal = PITAYA_NEW(TextureEntry);
+            ShaderEntry* PBRStaticShader = PITAYA_NEW(ShaderEntry);
+            ShaderEntry* PBRSkinnedShader = PITAYA_NEW(ShaderEntry);
+            MaterialEntry* PBRMaterial = PITAYA_NEW(MaterialEntry);
+            MeshEntry* Cube = PITAYA_NEW(MeshEntry);
+            MeshEntry* Panel = PITAYA_NEW(MeshEntry);
+            MeshEntry* Sphere = PITAYA_NEW(MeshEntry);
+            SkyBoxEntry* DefaultSkyBox = PITAYA_NEW(SkyBoxEntry);
+
+            BuiltinAssetStorage() = default;
+
+            ~BuiltinAssetStorage() noexcept
+            {
+                PITAYA_DELETE(White);
+                PITAYA_DELETE(Black);
+                PITAYA_DELETE(FlatNormal);
+                PITAYA_DELETE(PBRStaticShader);
+                PITAYA_DELETE(PBRSkinnedShader);
+                PITAYA_DELETE(PBRMaterial);
+                PITAYA_DELETE(Cube);
+                PITAYA_DELETE(Panel);
+                PITAYA_DELETE(Sphere);
+                PITAYA_DELETE(DefaultSkyBox);
+            }
+
+            BuiltinAssetStorage(const BuiltinAssetStorage&) = delete;
+            BuiltinAssetStorage& operator=(const BuiltinAssetStorage&) = delete;
+
+            bool IsValid() const noexcept
+            {
+                return White && Black && FlatNormal && PBRStaticShader && PBRSkinnedShader
+                    && PBRMaterial && Cube && Panel && Sphere && DefaultSkyBox;
+            }
         };
 
     private:
