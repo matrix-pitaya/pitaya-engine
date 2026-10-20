@@ -183,6 +183,7 @@
     <ClInclude Include="Database\AssetDatabase.h" />
     <ClInclude Include="GpuAssetBridge\GpuAssetBridge.h" />
     <ClInclude Include="ImportPipeline\ImportPipeline.h" />
+    <ClInclude Include="RuntimeAssetManager\RuntimeAssetManager.h" />
     <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

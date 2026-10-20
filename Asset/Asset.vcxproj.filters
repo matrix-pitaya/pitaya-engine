@@ -71,6 +71,9 @@
     <ClInclude Include="ImportPipeline\ImportPipeline.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="RuntimeAssetManager\RuntimeAssetManager.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h">
       <Filter>头文件</Filter>
     </ClInclude>

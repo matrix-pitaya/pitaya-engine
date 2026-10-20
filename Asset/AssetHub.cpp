@@ -69,7 +69,7 @@ Pitaya::Asset::AssetHub::FindTextureEntryCallback(void* userData, Pitaya::Core::
     if (!assetHub) { return nullptr; }
 
     Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* entry = nullptr;
-    assetHub->textures.FindOperateKV(guid,
+    assetHub->runtimeAssetManager.Textures().FindOperateKV(guid,
         [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* value)
         {
             entry = value;
@@ -85,7 +85,7 @@ Pitaya::Asset::AssetHub::FindShaderEntryCallback(void* userData, Pitaya::Core::G
     if (!assetHub) { return nullptr; }
 
     Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* entry = nullptr;
-    assetHub->shaders.FindOperateKV(guid,
+    assetHub->runtimeAssetManager.Shaders().FindOperateKV(guid,
         [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* value)
         {
             entry = value;
@@ -101,7 +101,7 @@ Pitaya::Asset::AssetHub::FindMeshEntryCallback(void* userData, Pitaya::Core::GUI
     if (!assetHub) { return nullptr; }
 
     Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
-    assetHub->meshes.FindOperateKV(guid,
+    assetHub->runtimeAssetManager.Meshes().FindOperateKV(guid,
         [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* value)
         {
             entry = value;
@@ -117,7 +117,7 @@ Pitaya::Asset::AssetHub::FindRenderTargetEntryCallback(void* userData, Pitaya::C
     if (!assetHub) { return nullptr; }
 
     Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry* entry = nullptr;
-    assetHub->rendertargets.FindOperateKV(guid,
+    assetHub->runtimeAssetManager.RenderTargets().FindOperateKV(guid,
         [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry* value)
         {
             entry = value;
@@ -133,7 +133,7 @@ Pitaya::Asset::AssetHub::FindSkyBoxEntryCallback(void* userData, Pitaya::Core::G
     if (!assetHub) { return nullptr; }
 
     Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry* entry = nullptr;
-    assetHub->skyboxes.FindOperateKV(guid,
+    assetHub->runtimeAssetManager.SkyBoxes().FindOperateKV(guid,
         [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry* value)
         {
             entry = value;
@@ -222,7 +222,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.Data = { 255, 255, 255, 255 };	//纯白贴图
         result.GUID = Pitaya::Asset::Texture::White;
         builtins.White->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        textures.Emplace(Pitaya::Asset::Texture::White, builtins.White);
+        runtimeAssetManager.Textures().Emplace(Pitaya::Asset::Texture::White, builtins.White);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -242,7 +242,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.Data = { 0, 0, 0, 255 };
         result.GUID = Pitaya::Asset::Texture::Black;
         builtins.Black->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        textures.Emplace(Pitaya::Asset::Texture::Black, builtins.Black);
+        runtimeAssetManager.Textures().Emplace(Pitaya::Asset::Texture::Black, builtins.Black);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -262,7 +262,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.Data = { 128, 128, 255, 255 };
         result.GUID = Pitaya::Asset::Texture::FlatNormal;
         builtins.FlatNormal->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        textures.Emplace(Pitaya::Asset::Texture::FlatNormal, builtins.FlatNormal);
+        runtimeAssetManager.Textures().Emplace(Pitaya::Asset::Texture::FlatNormal, builtins.FlatNormal);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -304,7 +304,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.Type = Pitaya::GPU::Shader::VF;
         result.GUID = Pitaya::Asset::Shader::PBRStatic;
         builtins.PBRStaticShader->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        shaders.Emplace(Pitaya::Asset::Shader::PBRStatic, builtins.PBRStaticShader);
+        runtimeAssetManager.Shaders().Emplace(Pitaya::Asset::Shader::PBRStatic, builtins.PBRStaticShader);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -346,7 +346,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.Type = Pitaya::GPU::Shader::VF;
         result.GUID = Pitaya::Asset::Shader::PBRSkinned;
         builtins.PBRSkinnedShader->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        shaders.Emplace(Pitaya::Asset::Shader::PBRSkinned, builtins.PBRSkinnedShader);
+        runtimeAssetManager.Shaders().Emplace(Pitaya::Asset::Shader::PBRSkinned, builtins.PBRSkinnedShader);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -375,7 +375,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         materialNativeData->SetTexture("uEmissiveMap",  Pitaya::Asset::Texture::Black);
         builtins.PBRMaterial->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         builtins.PBRMaterial->State.SetBits(Pitaya::Core::AssetState::GPULoaded);
-        materials.Emplace(Pitaya::Asset::Material::PBR, builtins.PBRMaterial);
+        runtimeAssetManager.Materials().Emplace(Pitaya::Asset::Material::PBR, builtins.PBRMaterial);
     } while (false);
 
     //Cube Mesh
@@ -452,7 +452,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
             { Pitaya::GPU::ShaderVariableType::Float4, 3 } };
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
         builtins.Cube->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        meshes.Emplace(Pitaya::Asset::Mesh::Cube, builtins.Cube);
+        runtimeAssetManager.Meshes().Emplace(Pitaya::Asset::Mesh::Cube, builtins.Cube);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -491,7 +491,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         result.BoundingBox = sub.BoundingBox;
         result.MaterialGUIDs.push_back(Pitaya::Asset::Material::PBR);
         builtins.Panel->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        meshes.Emplace(Pitaya::Asset::Mesh::Panel, builtins.Panel);
+        runtimeAssetManager.Meshes().Emplace(Pitaya::Asset::Mesh::Panel, builtins.Panel);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -599,7 +599,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
 
         // 提交到引擎系统
         builtins.Sphere->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        meshes.Emplace(Pitaya::Asset::Mesh::Sphere, builtins.Sphere);
+        runtimeAssetManager.Meshes().Emplace(Pitaya::Asset::Mesh::Sphere, builtins.Sphere);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -613,7 +613,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         Pitaya::Import::SkyBoxImportResult result;
         importPipeline.ImportSkyBox(Pitaya::Asset::SkyBox::Default, rc.data, rc.size, true, result);
         builtins.DefaultSkyBox->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
-        skyboxes.Emplace(Pitaya::Asset::SkyBox::Default, builtins.DefaultSkyBox);
+        runtimeAssetManager.SkyBoxes().Emplace(Pitaya::Asset::SkyBox::Default, builtins.DefaultSkyBox);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
     } while (false);
 
@@ -622,25 +622,25 @@ bool Pitaya::Asset::AssetHub::Initialize()
 void Pitaya::Asset::AssetHub::Release()
 {
     //从资源池移除内置资源
-    shaders.Erase(Pitaya::Asset::Shader::PBRStatic);
-    shaders.Erase(Pitaya::Asset::Shader::PBRSkinned);
-    textures.Erase(Pitaya::Asset::Texture::White);
-    textures.Erase(Pitaya::Asset::Texture::Black);
-    textures.Erase(Pitaya::Asset::Texture::FlatNormal);
-    materials.Erase(Pitaya::Asset::Material::PBR);
-    meshes.Erase(Pitaya::Asset::Mesh::Cube);
-    meshes.Erase(Pitaya::Asset::Mesh::Sphere);
-    meshes.Erase(Pitaya::Asset::Mesh::Panel);
-    skyboxes.Erase(Pitaya::Asset::SkyBox::Default);
+    runtimeAssetManager.Shaders().Erase(Pitaya::Asset::Shader::PBRStatic);
+    runtimeAssetManager.Shaders().Erase(Pitaya::Asset::Shader::PBRSkinned);
+    runtimeAssetManager.Textures().Erase(Pitaya::Asset::Texture::White);
+    runtimeAssetManager.Textures().Erase(Pitaya::Asset::Texture::Black);
+    runtimeAssetManager.Textures().Erase(Pitaya::Asset::Texture::FlatNormal);
+    runtimeAssetManager.Materials().Erase(Pitaya::Asset::Material::PBR);
+    runtimeAssetManager.Meshes().Erase(Pitaya::Asset::Mesh::Cube);
+    runtimeAssetManager.Meshes().Erase(Pitaya::Asset::Mesh::Sphere);
+    runtimeAssetManager.Meshes().Erase(Pitaya::Asset::Mesh::Panel);
+    runtimeAssetManager.SkyBoxes().Erase(Pitaya::Asset::SkyBox::Default);
 
     // 先从 map 脱离所有 Entry，但暂时不删除 Entry。本阶段必须保证所有 Entry
     // 都还活着，因为 Material/Mesh 的析构会释放它们持有的 AssetRef。
-    auto meshEntries = meshes.ExtractAll();
-    auto textureEntries = textures.ExtractAll();
-    auto shaderEntries = shaders.ExtractAll();
-    auto materialEntries = materials.ExtractAll();
-    auto renderTargetEntries = rendertargets.ExtractAll();
-    auto skyBoxEntries = skyboxes.ExtractAll();
+    auto meshEntries = runtimeAssetManager.Meshes().ExtractAll();
+    auto textureEntries = runtimeAssetManager.Textures().ExtractAll();
+    auto shaderEntries = runtimeAssetManager.Shaders().ExtractAll();
+    auto materialEntries = runtimeAssetManager.Materials().ExtractAll();
+    auto renderTargetEntries = runtimeAssetManager.RenderTargets().ExtractAll();
+    auto skyBoxEntries = runtimeAssetManager.SkyBoxes().ExtractAll();
 
     auto clearEntryData = [](auto& entries)
     {
@@ -1071,7 +1071,7 @@ void Pitaya::Asset::AssetHub::LoadTextureAsset(Pitaya::Core::GUID guid, const st
 
     //文件格式异常 标记CPU加载失败
     std::string log;
-    textures.FindOperateKV(guid,
+    runtimeAssetManager.Textures().FindOperateKV(guid,
         [&log, &path, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1093,7 +1093,7 @@ bool Pitaya::Asset::AssetHub::LoadTexture2DAsset(Pitaya::Core::GUID guid, const 
 {
     std::string log;
     Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* entry = nullptr;
-    textures.FindOperateKV(guid,
+    runtimeAssetManager.Textures().FindOperateKV(guid,
         [&path, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1142,7 +1142,7 @@ bool Pitaya::Asset::AssetHub::LoadTextureCubemapAsset(Pitaya::Core::GUID guid, c
 {
     std::string log;
     Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* entry = nullptr;
-    textures.FindOperateKV(guid,
+    runtimeAssetManager.Textures().FindOperateKV(guid,
         [&file, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1252,7 +1252,7 @@ void Pitaya::Asset::AssetHub::LoadShaderAsset(Pitaya::Core::GUID guid, const std
 
     //异常状态Shader 标记CPU加载失败
     std::string log;
-    shaders.FindOperateKV(guid,
+    runtimeAssetManager.Shaders().FindOperateKV(guid,
         [&log, &folder, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1277,7 +1277,7 @@ bool Pitaya::Asset::AssetHub::LoadVFShaderAsset(Pitaya::Core::GUID guid, const s
     std::string strPath = folder.string();
 
     Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* entry = nullptr;
-    shaders.FindOperateKV(guid,
+    runtimeAssetManager.Shaders().FindOperateKV(guid,
         [strPath, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1330,7 +1330,7 @@ bool Pitaya::Asset::AssetHub::LoadVFGShaderAsset(Pitaya::Core::GUID guid, const 
     std::string strPath = folder.string();
 
     Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* entry = nullptr;
-    shaders.FindOperateKV(guid,
+    runtimeAssetManager.Shaders().FindOperateKV(guid,
         [strPath, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1428,7 +1428,7 @@ bool Pitaya::Asset::AssetHub::LoadStaticMeshAsset(Pitaya::Core::GUID guid, const
     std::string log;
     std::string path = file.string();
     Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
-    meshes.FindOperateKV(guid,
+    runtimeAssetManager.Meshes().FindOperateKV(guid,
         [path, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1479,7 +1479,7 @@ bool Pitaya::Asset::AssetHub::LoadSkinnedMeshAsset(Pitaya::Core::GUID guid, cons
     std::string log;
     std::string stringPath = path.string();
     Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* entry = nullptr;
-    meshes.FindOperateKV(guid,
+    runtimeAssetManager.Meshes().FindOperateKV(guid,
         [stringPath, &log, &entry, generation](Pitaya::Core::GUID assetGuid, Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry* assetEntry)
         {
             if (!assetEntry)
@@ -1537,7 +1537,7 @@ void Pitaya::Asset::AssetHub::LoadMaterialAsset(Pitaya::Core::GUID guid, const s
     std::string log;
     std::string path = file.string();
     Pitaya::Core::AssetRef<Pitaya::Asset::Material>::AssetEntry* entry = nullptr;
-    materials.FindOperateKV(guid,
+    runtimeAssetManager.Materials().FindOperateKV(guid,
         [path, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::Material>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1606,7 +1606,7 @@ void Pitaya::Asset::AssetHub::LoadRenderTarget(Pitaya::Core::GUID guid, const st
     std::string log;
     std::string path = file.string();
     Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry* entry = nullptr;
-    rendertargets.FindOperateKV(guid,
+    runtimeAssetManager.RenderTargets().FindOperateKV(guid,
         [path, &log, &entry, generation](Pitaya::Core::GUID _guid, Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry* _entry)
         {
             if (!_entry)
@@ -1665,7 +1665,7 @@ void Pitaya::Asset::AssetHub::LoadRenderTarget(Pitaya::Core::GUID guid, const st
 void Pitaya::Asset::AssetHub::LoadSkyBoxAsset(Pitaya::Core::GUID guid, const std::filesystem::path& path, uint64_t generation)
 {
     Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry* entry = nullptr;
-    skyboxes.FindOperateKV(guid,
+    runtimeAssetManager.SkyBoxes().FindOperateKV(guid,
         [&entry](Pitaya::Core::GUID, Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry* value) { entry = value; },
         [](Pitaya::Core::GUID) {});
     if (!entry || !entry->IsLoadGeneration(generation) || entry->IsUnloadRequested())

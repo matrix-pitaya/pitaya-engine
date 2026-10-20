@@ -24,6 +24,7 @@
 #include<Asset/Common/SkyBox.h>
 #include<Asset/GpuAssetBridge/GpuAssetBridge.h>
 #include<Asset/ImportPipeline/ImportPipeline.h>
+#include<Asset/RuntimeAssetManager/RuntimeAssetManager.h>
 #include<Asset/VirtualFileSystem/VirtualFileSystem.h>
 
 #include<mutex>
@@ -356,12 +357,7 @@ namespace Pitaya::Asset
         Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
             typename Pitaya::Core::AssetRef<T>::AssetEntry*>& GetAssetEntryMap()
         {
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { return textures; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>) { return shaders; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>) { return meshes; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Material>) { return materials; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>) { return rendertargets; }
-            if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>) { return skyboxes; }
+            return runtimeAssetManager.GetAssetEntryMap<T>();
         }
 
         template<AssetType T>
@@ -650,18 +646,7 @@ namespace Pitaya::Asset
     private:
         Pitaya::Asset::VirtualFileSystem virtualFileSystem;
         
-        Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
-            Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry*> meshes;
-        Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
-            Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry*> textures;
-        Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
-            Pitaya::Core::AssetRef<Pitaya::Asset::Shader>::AssetEntry*> shaders;
-        Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
-            Pitaya::Core::AssetRef<Pitaya::Asset::Material>::AssetEntry*> materials;
-        Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
-            Pitaya::Core::AssetRef<Pitaya::Asset::RenderTarget>::AssetEntry*> rendertargets;
-        Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
-            Pitaya::Core::AssetRef<Pitaya::Asset::SkyBox>::AssetEntry*> skyboxes;
+        Pitaya::Asset::RuntimeAssetManager runtimeAssetManager;
 
         // CPU 线程提交，Renderer 线程消费；OpenGL 操作只在 GpuAssetBridge::Process 中执行。
         Pitaya::Asset::GpuAssetBridge gpuAssetBridge;
