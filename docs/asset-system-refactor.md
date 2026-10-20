@@ -250,7 +250,7 @@ Material 反序列化现在会恢复 Shader 参数布局和 `Textures` 子节点
 
 - `AssetHub::Release` 现在先抽离所有 Entry、清空 Data，再按引用计数脱离 Entry；仍被外部 `AssetRef` 持有的 Entry 会保留空 Data，并在最后一个引用释放时自动回收。
 - 内置资产 Entry 现在也是独立的堆控制块。无外部引用时由 `BuiltinAssetStorage` 释放；仍被引用时从 AssetHub 脱离并保留空 Data，最后一个引用释放后自动回收，避免内嵌成员随 AssetHub 销毁后让内置 `AssetRef` 悬空。
-- 运行时卸载队列目前只保证 GPU 句柄延后一帧销毁，Entry 本身仍保留在 map 中，下一阶段增加可回收 Entry 的扫描和重载复用策略。
+- 运行时卸载队列已经有按帧预算的 Entry 回收；下一阶段仍需给 AssetOperate 增加稳定 Entry token 和 pending operation 计数，使更复杂的异步依赖也能在 map 回收前得到严格确认。
 - Skinned Mesh 导入失败时可能长期停留在 CPULoading。
 - StbImage 的全局 flip 状态不适合并行导入。
 - HDR 图片检测后仍可能使用 8-bit 导入路径。
