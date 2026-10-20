@@ -25,6 +25,40 @@ namespace Pitaya::Core
             // CPU 线程可能请求卸载，而 RenderThread 同时提交新的 GPU 句柄。
             // 句柄快照和替换必须通过同一把锁完成。
             mutable std::mutex LifecycleMutex;
+            // 0: 由 AssetHub 管理，1: 已脱离 AssetHub，2: 已回收。
+            std::atomic<uint8_t> OrphanState = 0;
+            using ReclaimFunction = void(*)(AssetEntry*) noexcept;
+            std::atomic<ReclaimFunction> OrphanReclaim = nullptr;
+
+            inline bool TryReclaimOrphan() noexcept
+            {
+                if (RefCount.HasRef()) { return false; }
+                uint8_t expected = 1;
+                if (!OrphanState.compare_exchange_strong(expected, 2,
+                    std::memory_order_acq_rel, std::memory_order_acquire))
+                {
+                    return false;
+                }
+                const ReclaimFunction reclaim = OrphanReclaim.load(std::memory_order_acquire);
+                if (!reclaim)
+                {
+                    OrphanState.store(1, std::memory_order_release);
+                    return false;
+                }
+                reclaim(this);
+                return true;
+            }
+
+            inline void SetOrphanReclaimFunction(ReclaimFunction reclaim) noexcept
+            {
+                OrphanReclaim.store(reclaim, std::memory_order_release);
+            }
+
+            inline bool MarkOrphaned() noexcept
+            {
+                OrphanState.store(1, std::memory_order_release);
+                return TryReclaimOrphan();
+            }
 
             inline bool IsCpuReady() const noexcept
             {
@@ -119,7 +153,7 @@ namespace Pitaya::Core
         AssetRef() noexcept = default;
         ~AssetRef() noexcept
         {
-            if (entry) { entry->RefCount.ReduceRefCount(); }
+            ReleaseEntry(entry);
         }
         AssetRef(std::nullptr_t) noexcept
             : entry(nullptr) {}
@@ -136,7 +170,7 @@ namespace Pitaya::Core
         AssetRef& operator=(const AssetRef& other) noexcept
         {
             if (this == &other) { return *this; }
-            if (entry) { entry->RefCount.ReduceRefCount(); }
+            ReleaseEntry(entry);
             entry = other.entry;
             if (entry) { entry->RefCount.AddRefCount(); }
             return *this;
@@ -149,21 +183,21 @@ namespace Pitaya::Core
         AssetRef& operator=(AssetRef&& other) noexcept
         {
             if (this == &other) { return *this; }
-            if (entry) { entry->RefCount.ReduceRefCount(); }
+            ReleaseEntry(entry);
             entry = other.entry;
             other.entry = nullptr;
             return *this;
         }
         AssetRef& operator=(std::nullptr_t) noexcept
         {
-            if (entry) { entry->RefCount.ReduceRefCount(); }
+            ReleaseEntry(entry);
             entry = nullptr;
             return *this;
         }
         AssetRef& operator=(AssetEntry* entry) noexcept
         {
             if (this->entry == entry) { return *this; }
-            if (this->entry) { this->entry->RefCount.ReduceRefCount(); }
+            ReleaseEntry(this->entry);
             this->entry = entry;
             if (this->entry) { this->entry->RefCount.AddRefCount(); }
             return *this;
@@ -253,6 +287,12 @@ namespace Pitaya::Core
         }
 
     private:
+        inline static void ReleaseEntry(AssetEntry* value) noexcept
+        {
+            if (!value) { return; }
+            if (value->RefCount.ReduceRefCount()) { value->TryReclaimOrphan(); }
+        }
+
         mutable AssetEntry* entry = nullptr;
     };
 }

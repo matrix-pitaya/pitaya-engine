@@ -175,6 +175,16 @@ bool Pitaya::Asset::AssetHub::Initialize()
         Pitaya::Log::Error("builtin asset storage allocation failed");
         return false;
     }
+    builtins.White->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Texture>);
+    builtins.Black->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Texture>);
+    builtins.FlatNormal->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Texture>);
+    builtins.PBRStaticShader->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Shader>);
+    builtins.PBRSkinnedShader->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Shader>);
+    builtins.PBRMaterial->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Material>);
+    builtins.Cube->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Mesh>);
+    builtins.Panel->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Mesh>);
+    builtins.Sphere->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::Mesh>);
+    builtins.DefaultSkyBox->SetOrphanReclaimFunction(&DestroyOrphanEntry<Pitaya::Asset::SkyBox>);
     RegisterBuiltinAssets();
     gpuAssetBridge.SetTextureCallbacks(this, &Pitaya::Asset::AssetHub::FindTextureEntryCallback);
     gpuAssetBridge.SetShaderCallbacks(this, &Pitaya::Asset::AssetHub::FindShaderEntryCallback);
@@ -680,9 +690,8 @@ void Pitaya::Asset::AssetHub::Release()
             Pitaya::Log::Warning("builtin asset entry retained after AssetHub shutdown, GUID:{}", retainedEntry->GUID);
             // 外部 AssetRef 仍然可能在引擎模块释放后析构。Entry 脱离 AssetHub
             // 后继续保留，Data 已清空，避免访问已经销毁的内嵌成员。
-            return;
         }
-        Pitaya::Core::Delete(retainedEntry);
+        retainedEntry->MarkOrphaned();
     };
 
     destroyBuiltinEntry(builtins.PBRStaticShader);
@@ -706,9 +715,8 @@ void Pitaya::Asset::AssetHub::Release()
                 Pitaya::Log::Warning("asset entry retained after AssetHub shutdown, GUID:{}", guid);
                 // 外部 AssetRef 仍可能在引擎模块释放后析构。保留 Entry 可以避免
                 // AssetRef 析构时访问已释放的引用计数；Data 已经被置空。
-                continue;
             }
-            Pitaya::Core::Delete(entry);
+            entry->MarkOrphaned();
         }
         entries.clear();
     };

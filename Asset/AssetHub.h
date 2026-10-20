@@ -60,6 +60,12 @@ namespace Pitaya::Asset
         };
 
     private:
+        template<AssetType AssetClass>
+        inline static void DestroyOrphanEntry(typename Pitaya::Core::AssetRef<AssetClass>::AssetEntry* entry) noexcept
+        {
+            PITAYA_DELETE(entry);
+        }
+
         struct BuiltinAssetStorage
         {
             using TextureEntry = Pitaya::Core::AssetRef<Pitaya::Asset::Texture>::AssetEntry;
@@ -83,16 +89,26 @@ namespace Pitaya::Asset
 
             ~BuiltinAssetStorage() noexcept
             {
-                PITAYA_DELETE(White);
-                PITAYA_DELETE(Black);
-                PITAYA_DELETE(FlatNormal);
-                PITAYA_DELETE(PBRStaticShader);
-                PITAYA_DELETE(PBRSkinnedShader);
-                PITAYA_DELETE(PBRMaterial);
-                PITAYA_DELETE(Cube);
-                PITAYA_DELETE(Panel);
-                PITAYA_DELETE(Sphere);
-                PITAYA_DELETE(DefaultSkyBox);
+                auto destroy = [](auto*& entry)
+                {
+                    if (!entry) { return; }
+                    auto* orphan = entry;
+                    entry = nullptr;
+                    auto* data = orphan->Data.exchange(nullptr, std::memory_order_acq_rel);
+                    PITAYA_DELETE(data);
+                    if (orphan->RefCount.HasRef()) { orphan->MarkOrphaned(); }
+                    else { PITAYA_DELETE(orphan); }
+                };
+                destroy(White);
+                destroy(Black);
+                destroy(FlatNormal);
+                destroy(PBRStaticShader);
+                destroy(PBRSkinnedShader);
+                destroy(PBRMaterial);
+                destroy(Cube);
+                destroy(Panel);
+                destroy(Sphere);
+                destroy(DefaultSkyBox);
             }
 
             BuiltinAssetStorage(const BuiltinAssetStorage&) = delete;
@@ -286,6 +302,7 @@ namespace Pitaya::Asset
 
                     asyncLoad = true;
                     typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = Pitaya::Core::New<typename Pitaya::Core::AssetRef<T>::AssetEntry>();
+                    if (entry) { entry->SetOrphanReclaimFunction(&DestroyOrphanEntry<T>); }
                     entry->GUID = _guid;
                     entry->Data.store(Pitaya::Core::New<T>(), std::memory_order_release);
                     generation = entry->BeginLoadGeneration();
