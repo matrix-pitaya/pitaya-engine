@@ -236,6 +236,8 @@ BuildManifest
   AssetKey -> artifact path/hash/type/dependencies/chunk
 ```
 
+Cook/Manifest 的第一步已经落地：`Asset/Cook/BuildManifest.h/.cpp` 提供独立的 `BuildManifestEntry` 索引，负责保存 Cook 产物路径、内容哈希、类型、chunk 和依赖闭包，并支持版本化序列化。它只依赖 `AssetKey` 和文件系统，不引用 `AssetHub`、`AssetRef` 或 GPU 类型；因此可以由编辑器/Cooker 写入，也可以由 Release 运行时只读加载。`AssetDatabase` 继续保存源文件和导入元数据，两者不会混写。
+
 Cook 阶段必须在编辑器或构建机完成 Assimp/StbImage 访问、材质生成和依赖闭包计算。Release 的 RuntimeAssetManager 只接受 `AssetKey`，从 Manifest 找到 CookArtifact，再把已中立化的 CPU 数据提交给 GpuAssetBridge；运行时不再扫描源目录，也不依赖 Import 静态库。
 
 ## 6. 当前阶段验收标准

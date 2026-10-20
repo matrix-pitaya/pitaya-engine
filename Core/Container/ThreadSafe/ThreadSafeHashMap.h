@@ -7,6 +7,7 @@
 #include<type_traits>  
 #include<initializer_list>
 #include<optional>
+#include<vector>
 
 namespace Pitaya::Core
 {
@@ -49,6 +50,17 @@ namespace Pitaya::Core
             std::unordered_map<Key, Value, Hash, KeyEqual> out;
             std::swap(out, map);
             return out;
+        }
+        inline std::vector<std::pair<Key, Value>> GetAllKeyValuePairs() const
+        {
+            std::shared_lock<std::shared_mutex> lock(mutex);
+            std::vector<std::pair<Key, Value>> result;
+            result.reserve(map.size());
+            for (const auto& [key, value] : map)
+            {
+                result.emplace_back(key, value);
+            }
+            return result;
         }
         inline bool Emplace(const Key& key, Value value)
         {

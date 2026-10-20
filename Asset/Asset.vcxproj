@@ -161,6 +161,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AssetHub.cpp" />
+    <ClCompile Include="Cook\BuildManifest.cpp" />
     <ClCompile Include="Database\AssetDatabase.cpp" />
     <ClCompile Include="ImportPipeline\ImportPipeline.cpp" />
     <ClCompile Include="VirtualFileSystem\VirtualFileSystem.cpp" />
@@ -180,6 +181,7 @@
     <ClInclude Include="Common\AssetType.h" />
     <ClInclude Include="Common\AssetKey.h" />
     <ClInclude Include="Common\AssetCatalog.h" />
+    <ClInclude Include="Cook\BuildManifest.h" />
     <ClInclude Include="Database\AssetDatabase.h" />
     <ClInclude Include="GpuAssetBridge\GpuAssetBridge.h" />
     <ClInclude Include="ImportPipeline\ImportPipeline.h" />
