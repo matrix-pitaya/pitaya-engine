@@ -165,6 +165,10 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 - 各类导入函数移动到 ImportPipeline。
 - 增加依赖图、循环检测和结构化错误。
 
+当前已落地 ImportPipeline 第一阶段：`Asset/ImportPipeline/ImportPipeline.h/.cpp` 统一封装 Texture2D、Cubemap、VF/VFG Shader、Mesh preload/static/skinned 和 SkyBox 的源文件导入。AssetHub 仍负责路径校验、generation、任务调度和状态提交，但不再直接调用 `Import::Import`；后续可以把这些调度和 Entry 操作整体迁移到 RuntimeAssetManager。
+
+ImportPipeline 的边界是：输入 GUID、虚拟/已解析路径和 `ImportContext`，输出 `ImportResult`；它不创建 `AssetEntry`、不持有 `AssetRef`、不写 AssetDatabase、不触碰 GPU。下一步的 RuntimeAssetManager 会接管 AssetHub 当前的 Entry map、异步加载和状态机，AssetHub 只保留兼容 facade。
+
 ### 阶段四：拆 GpuAssetBridge
 
 - `AssetOperate` 改为带 `AssetKey + generation` 的上传命令。
@@ -216,6 +220,21 @@ AssetOperate 队列（只传递 CPU 数据和 GPU 命令参数）
 - 增加 BuildManifest、artifact hash、依赖闭包和 chunk 分组。
 - Editor 提供资产状态、依赖图、缺失引用、重复 GUID 和循环依赖诊断。
 - Release 构建移除源文件导入路径。
+
+目标接口按三层拆分：
+
+```text
+ImportPipeline
+  Import(SourcePath, ImportSettings) -> ImportResult + Diagnostics
+
+AssetCooker
+  Build(AssetRecord, ImportResult) -> CookArtifact + DependencySet
+
+BuildManifest
+  AssetKey -> artifact path/hash/type/dependencies/chunk
+```
+
+Cook 阶段必须在编辑器或构建机完成 Assimp/StbImage 访问、材质生成和依赖闭包计算。Release 的 RuntimeAssetManager 只接受 `AssetKey`，从 Manifest 找到 CookArtifact，再把已中立化的 CPU 数据提交给 GpuAssetBridge；运行时不再扫描源目录，也不依赖 Import 静态库。
 
 ## 6. 当前阶段验收标准
 

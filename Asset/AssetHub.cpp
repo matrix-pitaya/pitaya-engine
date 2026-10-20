@@ -204,6 +204,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         Pitaya::Log::Error("asset database could not be initialized, path:" + registryFile.string());
         return false;
     }
+    importPipeline.SetContext(GetImportContext());
 
     //White Texture
     do
@@ -610,7 +611,7 @@ bool Pitaya::Asset::AssetHub::Initialize()
         builtins.DefaultSkyBox->State.SetBits(Pitaya::Core::AssetState::CPULoading);
         auto rc = Pitaya::Core::LoadBuiltInRC(IDR_SKYBOX_HDR);
         Pitaya::Import::SkyBoxImportResult result;
-        Pitaya::Import::Import(Pitaya::Asset::SkyBox::Default, rc.data, rc.size, true, result);
+        importPipeline.ImportSkyBox(Pitaya::Asset::SkyBox::Default, rc.data, rc.size, true, result);
         builtins.DefaultSkyBox->State.ModifyBits(Pitaya::Core::AssetState::CPULoaded, Pitaya::Core::AssetState::CPULoading);
         skyboxes.Emplace(Pitaya::Asset::SkyBox::Default, builtins.DefaultSkyBox);
         gpuAssetBridge.Enqueue(Pitaya::Asset::AssetOperate{ std::move(result) });
@@ -1120,7 +1121,7 @@ bool Pitaya::Asset::AssetHub::LoadTexture2DAsset(Pitaya::Core::GUID guid, const 
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry || !entry->IsLoadGeneration(generation)) { return false; }
 
-    if (!Pitaya::Import::Import(guid, path, true, true, result))
+    if (!importPipeline.ImportTexture2D(guid, path, true, true, result))
     {
         Pitaya::Log::Error("texture load failed: " + path.string());
         if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading); }
@@ -1169,7 +1170,7 @@ bool Pitaya::Asset::AssetHub::LoadTextureCubemapAsset(Pitaya::Core::GUID guid, c
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry || !entry->IsLoadGeneration(generation)) { return false; }
 
-    if (!Pitaya::Import::Import(guid, file, paths,true, true, result))
+    if (!importPipeline.ImportTextureCubemap(guid, file, paths, true, true, result))
     {
         Pitaya::Log::Error("texture cubemap load failed: " + file.string());
         if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading); }
@@ -1305,7 +1306,7 @@ bool Pitaya::Asset::AssetHub::LoadVFShaderAsset(Pitaya::Core::GUID guid, const s
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry || !entry->IsLoadGeneration(generation)) { return false; }
 
-    if (!Pitaya::Import::Import(guid, folder, vertexPath, fragmentPath, cpuOpResult_Inner))
+    if (!importPipeline.ImportShader(guid, folder, vertexPath, fragmentPath, cpuOpResult_Inner))
     {
         Pitaya::Log::Error("shader load failed: " + strPath);
         if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading); }
@@ -1358,7 +1359,7 @@ bool Pitaya::Asset::AssetHub::LoadVFGShaderAsset(Pitaya::Core::GUID guid, const 
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry || !entry->IsLoadGeneration(generation)) { return false; }
 
-    if (!Pitaya::Import::Import(guid, folder, vertexPath, fragmentPath, geometry, cpuOpResult_Inner))
+    if (!importPipeline.ImportShader(guid, folder, vertexPath, fragmentPath, geometry, cpuOpResult_Inner))
     {
         if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading); }
         return false;
@@ -1384,8 +1385,7 @@ void Pitaya::Asset::AssetHub::LoadMeshAsset(Pitaya::Core::GUID guid, const std::
     }
 
     Pitaya::Import::MeshPreloadResult preloadResult;
-    const auto importContext = GetImportContext();
-    if (!Pitaya::Import::Import(guid, file, preloadResult, Pitaya::Import::MeshAPI::Assimp, &importContext))
+    if (!importPipeline.PreloadMesh(guid, file, preloadResult))
     {
         Pitaya::Log::Error("GUID:" + guid.ToString() + " preload fail, path:" + file.string());
         return;
@@ -1457,8 +1457,7 @@ bool Pitaya::Asset::AssetHub::LoadStaticMeshAsset(Pitaya::Core::GUID guid, const
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry || !entry->IsLoadGeneration(generation)) { return false; }
 
-    const auto importContext = GetImportContext();
-    if (!Pitaya::Import::Import(guid, file, preloadResult, out, Pitaya::Import::MeshAPI::Assimp, &importContext))
+    if (!importPipeline.ImportStaticMesh(guid, file, preloadResult, out))
     {
         Pitaya::Log::Error("static mesh load fail, GUID:" + guid.ToString() + ", path:" + path);
         if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading); }
@@ -1509,8 +1508,7 @@ bool Pitaya::Asset::AssetHub::LoadSkinnedMeshAsset(Pitaya::Core::GUID guid, cons
     if (!log.empty()) { Pitaya::Log::Error(log); }
     if (!entry || !entry->IsLoadGeneration(generation)) { return false; }
 
-    const auto importContext = GetImportContext();
-    if (!Pitaya::Import::Import(guid, path, detectResult, out, Pitaya::Import::MeshAPI::Assimp, &importContext))
+    if (!importPipeline.ImportSkinnedMesh(guid, path, detectResult, out))
     {
         Pitaya::Log::Error("skinned mesh load fail, GUID:" + guid.ToString() + ", path:" + stringPath);
         if (entry->IsLoadGeneration(generation)) { entry->State.ModifyBits(Pitaya::Core::AssetState::CPUFailed, Pitaya::Core::AssetState::CPULoading); }
@@ -1677,7 +1675,7 @@ void Pitaya::Asset::AssetHub::LoadSkyBoxAsset(Pitaya::Core::GUID guid, const std
     }
 
     Pitaya::Import::SkyBoxImportResult result;
-    if (Pitaya::Import::Import(guid, path, true, result))
+    if (importPipeline.ImportSkyBox(guid, path, true, result))
     {
         if (!entry->IsLoadGeneration(generation) || entry->IsUnloadRequested())
         {

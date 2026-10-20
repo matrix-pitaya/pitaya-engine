@@ -23,6 +23,7 @@
 #include<Asset/Common/AssetCatalog.h>
 #include<Asset/Common/SkyBox.h>
 #include<Asset/GpuAssetBridge/GpuAssetBridge.h>
+#include<Asset/ImportPipeline/ImportPipeline.h>
 #include<Asset/VirtualFileSystem/VirtualFileSystem.h>
 
 #include<mutex>
@@ -664,6 +665,7 @@ namespace Pitaya::Asset
 
         // CPU 线程提交，Renderer 线程消费；OpenGL 操作只在 GpuAssetBridge::Process 中执行。
         Pitaya::Asset::GpuAssetBridge gpuAssetBridge;
+        Pitaya::Asset::ImportPipeline importPipeline;
 
         Pitaya::Asset::AssetDatabase database;
         Pitaya::Asset::AssetHub::BuiltinAssetStorage builtins;

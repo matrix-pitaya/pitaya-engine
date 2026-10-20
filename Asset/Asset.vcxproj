@@ -162,6 +162,7 @@
   <ItemGroup>
     <ClCompile Include="AssetHub.cpp" />
     <ClCompile Include="Database\AssetDatabase.cpp" />
+    <ClCompile Include="ImportPipeline\ImportPipeline.cpp" />
     <ClCompile Include="VirtualFileSystem\VirtualFileSystem.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -181,6 +182,7 @@
     <ClInclude Include="Common\AssetCatalog.h" />
     <ClInclude Include="Database\AssetDatabase.h" />
     <ClInclude Include="GpuAssetBridge\GpuAssetBridge.h" />
+    <ClInclude Include="ImportPipeline\ImportPipeline.h" />
     <ClInclude Include="VirtualFileSystem\VirtualFileSystem.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
