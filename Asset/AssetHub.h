@@ -272,51 +272,14 @@ namespace Pitaya::Asset
                 return nullptr;
             }
 
-            std::string log;
-            Pitaya::Log::LogLevel level = Pitaya::Log::LogLevel::Info;
-            bool asyncLoad = false;
-            uint64_t generation = 0;
-            typename Pitaya::Core::AssetRef<T> asset = nullptr;
-            auto& map = GetAssetEntryMap<T>();
-            map.FindOperateKVOrInsert(guid,
-                [&asset, &asyncLoad, &generation, &log, &level](Pitaya::Core::GUID _guid, typename Pitaya::Core::AssetRef<T>::AssetEntry* _entry)
-                {
-                    if (!_entry)
-                    {
-                        log = "asset entry is empty! GUID:" + _guid.ToString();
-                        level = Pitaya::Log::LogLevel::Error;
-                        return;
-                    }
-
-                    log = "asset entry reused GUID:" + _guid.ToString();
-                    level = Pitaya::Log::LogLevel::Info;
-                    asset = _entry;
-
-                    if (_entry->IsUnloadRequested() || _entry->IsFailed())
-                    {
-                        _entry->PrepareReload();
-                        generation = _entry->BeginLoadGeneration();
-                        asyncLoad = true;
-                    }
-                },
-                [&asset, &asyncLoad, &generation, &log, &level](Pitaya::Core::GUID _guid) -> std::optional<std::pair<Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry*>>
-                {
-                    level = Pitaya::Log::LogLevel::Info;
-                    log = "asset entry inexistence, create asset entry GUID:" + _guid.ToString();
-
-                    asyncLoad = true;
-                    typename Pitaya::Core::AssetRef<T>::AssetEntry* entry = Pitaya::Core::New<typename Pitaya::Core::AssetRef<T>::AssetEntry>();
-                    if (entry) { entry->SetOrphanReclaimFunction(&DestroyOrphanEntry<T>); }
-                    entry->GUID = _guid;
-                    entry->Data.store(Pitaya::Core::New<T>(), std::memory_order_release);
-                    generation = entry->BeginLoadGeneration();
-                    entry->BeginCpuLoad();
-                    asset = entry;
-                    return std::make_pair(_guid, entry);
-                });
-            Pitaya::Log::Write(level, log);
-            if (asyncLoad) { AsyncLoadAsset<T>(guid, resolvePath, generation); }
-            return asset;
+            auto acquired = runtimeAssetManager.Acquire<T>(guid);
+            if (!acquired.Asset)
+            {
+                Pitaya::Log::Error("asset entry allocation failed GUID:" + guid.ToString());
+                return nullptr;
+            }
+            if (acquired.ShouldLoad) { AsyncLoadAsset<T>(guid, resolvePath, acquired.Generation); }
+            return std::move(acquired.Asset);
         }
 
     private:

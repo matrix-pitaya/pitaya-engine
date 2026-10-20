@@ -1,5 +1,6 @@
 #pragma once
 
+#include<Core/Allocate/Allocate.h>
 #include<Core/Asset/AssetRef.h>
 #include<Core/Container/ThreadSafe/ThreadSafeHashMap.h>
 #include<Core/Identifier/GUID.h>
@@ -11,6 +12,9 @@
 #include<Asset/Common/SkyBox.h>
 #include<Asset/Common/Shader.h>
 #include<Asset/Common/Texture.h>
+
+#include<cstdint>
+#include<optional>
 
 namespace Pitaya::Asset
 {
@@ -31,6 +35,48 @@ namespace Pitaya::Asset
         RuntimeAssetManager& operator=(RuntimeAssetManager&&) = delete;
 
         template<AssetType T>
+        struct AcquireResult
+        {
+            Pitaya::Core::AssetRef<T> Asset = nullptr;
+            uint64_t Generation = 0;
+            bool ShouldLoad = false;
+        };
+
+        template<AssetType T>
+        inline AcquireResult<T> Acquire(Pitaya::Core::GUID guid)
+        {
+            AcquireResult<T> result;
+            GetAssetEntryMap<T>().FindOperateKVOrInsert(guid,
+                [&result](Pitaya::Core::GUID, typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
+                {
+                    if (!entry) { return; }
+                    result.Asset = entry;
+                    if (entry->IsUnloadRequested() || entry->IsFailed())
+                    {
+                        entry->PrepareReload();
+                        result.Generation = entry->BeginLoadGeneration();
+                        result.ShouldLoad = true;
+                    }
+                },
+                [&result](Pitaya::Core::GUID _guid)
+                    -> std::optional<std::pair<Pitaya::Core::GUID,
+                        typename Pitaya::Core::AssetRef<T>::AssetEntry*>>
+                {
+                    auto* entry = Pitaya::Core::New<typename Pitaya::Core::AssetRef<T>::AssetEntry>();
+                    if (!entry) { return std::nullopt; }
+                    entry->GUID = _guid;
+                    entry->Data.store(Pitaya::Core::New<T>(), std::memory_order_release);
+                    entry->SetOrphanReclaimFunction(&DestroyEntry<T>);
+                    entry->BeginCpuLoad();
+                    result.Asset = entry;
+                    result.Generation = entry->BeginLoadGeneration();
+                    result.ShouldLoad = true;
+                    return std::make_pair(_guid, entry);
+                });
+            return result;
+        }
+
+        template<AssetType T>
         inline auto& GetAssetEntryMap() noexcept
         {
             if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>) { return textures; }
@@ -49,6 +95,12 @@ namespace Pitaya::Asset
         inline auto& SkyBoxes() noexcept { return skyboxes; }
 
     private:
+        template<AssetType AssetClass>
+        inline static void DestroyEntry(typename Pitaya::Core::AssetRef<AssetClass>::AssetEntry* entry) noexcept
+        {
+            PITAYA_DELETE(entry);
+        }
+
         Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
             Pitaya::Core::AssetRef<Pitaya::Asset::Mesh>::AssetEntry*> meshes;
         Pitaya::Core::ThreadSafeHashMap<Pitaya::Core::GUID,
