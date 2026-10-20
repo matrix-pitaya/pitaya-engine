@@ -62,11 +62,11 @@ namespace Pitaya::Core
 
             inline bool IsCpuReady() const noexcept
             {
-                return State.HasBits(AssetState::CPULoaded) && !State.HasBits(AssetState::Unload);
+                return State.HasAllBitsAndNone(AssetState::CPULoaded, AssetState::Unload);
             }
             inline bool IsGpuReady() const noexcept
             {
-                return State.HasBits(AssetState::GPULoaded) && !State.HasBits(AssetState::Unload);
+                return State.HasAllBitsAndNone(AssetState::GPULoaded, AssetState::Unload);
             }
             inline bool IsReady() const noexcept
             {
@@ -79,11 +79,11 @@ namespace Pitaya::Core
             }
             inline bool IsLoading() const noexcept
             {
-                return State.HasBits(AssetState::CPULoading) || State.HasBits(AssetState::GPULoading);
+                return State.HasAnyBits(AssetState::CPULoading, AssetState::GPULoading);
             }
             inline bool IsFailed() const noexcept
             {
-                return State.HasBits(AssetState::CPUFailed) || State.HasBits(AssetState::GPUFailed);
+                return State.HasAnyBits(AssetState::CPUFailed, AssetState::GPUFailed);
             }
             inline bool IsUnloadRequested() const noexcept
             {
@@ -91,15 +91,13 @@ namespace Pitaya::Core
             }
             inline void BeginCpuLoad() noexcept
             {
-                State.ClearBits(AssetState::Unload);
-                State.ClearBits(AssetState::CPULoaded);
-                State.ClearBits(AssetState::CPUFailed);
-                State.SetBits(AssetState::CPULoading);
+                State.ModifyBits(AssetState::CPULoading,
+                    AssetState::Unload, AssetState::CPULoaded, AssetState::CPUFailed);
             }
             inline void CompleteCpuLoad() noexcept
             {
-                State.ModifyBits(AssetState::CPULoaded, AssetState::CPULoading);
-                State.ClearBits(AssetState::CPUFailed);
+                State.ModifyBits(AssetState::CPULoaded,
+                    AssetState::CPULoading, AssetState::CPUFailed);
             }
             inline void FailCpuLoad() noexcept
             {
@@ -107,14 +105,13 @@ namespace Pitaya::Core
             }
             inline void BeginGpuLoad() noexcept
             {
-                State.ClearBits(AssetState::GPULoaded);
-                State.ClearBits(AssetState::GPUFailed);
-                State.SetBits(AssetState::GPULoading);
+                State.ModifyBits(AssetState::GPULoading,
+                    AssetState::GPULoaded, AssetState::GPUFailed);
             }
             inline void CompleteGpuLoad() noexcept
             {
-                State.ModifyBits(AssetState::GPULoaded, AssetState::GPULoading);
-                State.ClearBits(AssetState::GPUFailed);
+                State.ModifyBits(AssetState::GPULoaded,
+                    AssetState::GPULoading, AssetState::GPUFailed);
             }
             inline void FailGpuLoad() noexcept
             {
@@ -122,20 +119,13 @@ namespace Pitaya::Core
             }
             inline void RequestUnload() noexcept
             {
-                State.SetBits(AssetState::Unload);
-                State.ClearBits(AssetState::GPULoading);
-                State.ClearBits(AssetState::GPULoaded);
+                State.ModifyBits(AssetState::Unload,
+                    AssetState::GPULoading, AssetState::GPULoaded);
                 LoadGeneration.fetch_add(1, std::memory_order_acq_rel);
             }
             inline void PrepareReload() noexcept
             {
-                State.ClearBits(AssetState::Unload);
-                State.ClearBits(AssetState::CPULoading);
-                State.ClearBits(AssetState::CPULoaded);
-                State.ClearBits(AssetState::CPUFailed);
-                State.ClearBits(AssetState::GPULoading);
-                State.ClearBits(AssetState::GPULoaded);
-                State.ClearBits(AssetState::GPUFailed);
+                State.OverwriteBits(AssetState::Empty);
             }
 
             inline uint64_t BeginLoadGeneration() noexcept

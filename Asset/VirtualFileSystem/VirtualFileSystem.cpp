@@ -11,8 +11,8 @@ namespace
     }
 }
 
-bool Pitaya::Asset::VirtualFileSystem::Initialize(
-    const std::filesystem::path& engineRoot, const std::filesystem::path& projectRoot,
+bool Pitaya::Asset::VirtualFileSystem::Initialize(const std::filesystem::path& engineRoot,
+    const std::filesystem::path& projectRoot,
     const std::filesystem::path& cacheRoot, const std::filesystem::path& cookRoot)
 {
     mounts[GetMountIndex(MountId::Engine)].Root = NormalizeRoot(engineRoot);
@@ -23,8 +23,8 @@ bool Pitaya::Asset::VirtualFileSystem::Initialize(
         && !mounts[GetMountIndex(MountId::Project)].Root.empty();
 }
 
-bool Pitaya::Asset::VirtualFileSystem::ToVirtualPath(
-    const std::filesystem::path& inputPath, const std::filesystem::path& basePath,
+bool Pitaya::Asset::VirtualFileSystem::ToVirtualPath(const std::filesystem::path& inputPath,
+    const std::filesystem::path& basePath,
     std::filesystem::path& outVirtualPath) const
 {
     std::filesystem::path resolvedBasePath = basePath;
@@ -52,8 +52,8 @@ bool Pitaya::Asset::VirtualFileSystem::ToVirtualPath(
     return false;
 }
 
-bool Pitaya::Asset::VirtualFileSystem::Resolve(
-    const std::filesystem::path& virtualPath, std::filesystem::path& outPhysicalPath) const
+bool Pitaya::Asset::VirtualFileSystem::Resolve(const std::filesystem::path& virtualPath,
+    std::filesystem::path& outPhysicalPath) const
 {
     const std::string virtualPathString = virtualPath.generic_string();
     for (const Mount& mount : mounts)
@@ -105,8 +105,8 @@ std::filesystem::path Pitaya::Asset::VirtualFileSystem::NormalizeRoot(const std:
     }
 }
 
-std::filesystem::path Pitaya::Asset::VirtualFileSystem::NormalizePath(
-    const std::filesystem::path& path, const std::filesystem::path& basePath)
+std::filesystem::path Pitaya::Asset::VirtualFileSystem::NormalizePath(const std::filesystem::path& path,
+    const std::filesystem::path& basePath)
 {
     std::filesystem::path absolutePath = path.is_absolute() ? path : basePath / path;
     try
@@ -127,8 +127,8 @@ std::filesystem::path Pitaya::Asset::VirtualFileSystem::NormalizePath(
     }
 }
 
-bool Pitaya::Asset::VirtualFileSystem::IsPathInRoot(
-    const std::filesystem::path& path, const std::filesystem::path& root) noexcept
+bool Pitaya::Asset::VirtualFileSystem::IsPathInRoot(const std::filesystem::path& path,
+    const std::filesystem::path& root) noexcept
 {
     if (path.root_name() != root.root_name()) { return false; }
     const std::filesystem::path relativePath = path.lexically_relative(root);

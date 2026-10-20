@@ -40,6 +40,7 @@ namespace Pitaya::Serialize
         void Write(const std::string& key, glm::ivec4 value) override;
         void Write(const std::string& key, bool value) override;
         void Write(const std::string& key, uint32_t value) override;
+        void Write(const std::string& key, uint64_t value) override;
 
     public:
         std::string ToString() const override;
@@ -82,6 +83,7 @@ namespace Pitaya::Serialize
        bool Read(const std::string& key, glm::ivec4& out) const override;
        bool Read(const std::string& key, bool& out) const override;
        bool Read(const std::string& key, uint32_t& out) const override;
+       bool Read(const std::string& key, uint64_t& out) const override;
 
     private:     
         YAML::Node root;

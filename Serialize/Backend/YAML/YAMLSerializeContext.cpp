@@ -13,6 +13,7 @@ void Pitaya::Serialize::YAMLSerializeContext::OpenFile(const std::filesystem::pa
 
 	this->file = file;
 	root = YAML::Node();
+    subContexts.clear();
 }
 void Pitaya::Serialize::YAMLSerializeContext::Save()
 {
@@ -27,20 +28,45 @@ void Pitaya::Serialize::YAMLSerializeContext::Save()
     }
 
 
-    if (!std::filesystem::exists(file.parent_path()))
+    const std::filesystem::path parentPath = file.parent_path();
+    if (!parentPath.empty() && !std::filesystem::exists(parentPath))
     {
-        std::filesystem::create_directories(file.parent_path());
+        std::filesystem::create_directories(parentPath);
     }
-        
-    std::ofstream filestream(file, std::ios::trunc);
+
+    const std::filesystem::path temporaryFile = file.string() + ".tmp";
+    std::ofstream filestream(temporaryFile, std::ios::trunc);
     if (!filestream.is_open()) 
     { 
-        throw std::runtime_error("YamlSerializeContext: Failed to open file - " + file.string()); 
+        throw std::runtime_error("YamlSerializeContext: Failed to open temporary file - " + temporaryFile.string()); 
     }
 
     filestream << YAML::Dump(root);
     filestream.flush();
+    if (!filestream.good())
+    {
+        filestream.close();
+        std::error_code cleanupError;
+        std::filesystem::remove(temporaryFile, cleanupError);
+        throw std::runtime_error("YamlSerializeContext: Failed to write file - " + file.string());
+    }
     filestream.close();
+
+    std::error_code renameError;
+    std::filesystem::rename(temporaryFile, file, renameError);
+    if (renameError)
+    {
+        std::error_code removeError;
+        std::filesystem::remove(file, removeError);
+        renameError.clear();
+        std::filesystem::rename(temporaryFile, file, renameError);
+    }
+    if (renameError)
+    {
+        std::error_code cleanupError;
+        std::filesystem::remove(temporaryFile, cleanupError);
+        throw std::runtime_error("YamlSerializeContext: Failed to replace file - " + file.string());
+    }
 }
 Pitaya::Serialize::SerializeContext& Pitaya::Serialize::YAMLSerializeContext::GetSubContext(const std::string& key)
 {
@@ -98,6 +124,10 @@ void Pitaya::Serialize::YAMLSerializeContext::Write(const std::string& key, uint
 {
     root[key] = value;
 }
+void Pitaya::Serialize::YAMLSerializeContext::Write(const std::string& key, uint64_t value)
+{
+    root[key] = value;
+}
 std::string Pitaya::Serialize::YAMLSerializeContext::ToString() const
 {
     return YAML::Dump(root);
@@ -115,6 +145,8 @@ void Pitaya::Serialize::YAMLDeserializeContext::LoadFile(const std::filesystem::
         throw std::runtime_error("YamlDeserializeContext: File not exists - " + file.string());
     }
         
+    root = YAML::Node();
+    subContexts.clear();
     try 
     {
         root = YAML::LoadFile(file.string());
@@ -131,6 +163,8 @@ void Pitaya::Serialize::YAMLDeserializeContext::LoadString(const std::string& da
         throw std::runtime_error("YAMLDeserializeContext: Sub context cannot call LoadString");
     }
 
+    root = YAML::Node();
+    subContexts.clear();
     try 
     {
         root = YAML::Load(data);
@@ -266,6 +300,15 @@ bool Pitaya::Serialize::YAMLDeserializeContext::Read(const std::string& key, uin
     }
     return false;
 }
+bool Pitaya::Serialize::YAMLDeserializeContext::Read(const std::string& key, uint64_t& out) const
+{
+    if (root[key] && root[key].IsScalar())
+    {
+        out = root[key].as<uint64_t>();
+        return true;
+    }
+    return false;
+}
 
 namespace YAML 
 {
@@ -370,8 +413,8 @@ namespace YAML
         static bool decode(const Node& node, glm::ivec2& rhs)
         {
             if (!node.IsSequence() || node.size() != 2) { return false; }
-            rhs.x = node[0].as<float>();
-            rhs.y = node[1].as<float>();
+            rhs.x = node[0].as<int>();
+            rhs.y = node[1].as<int>();
             return true;
         }
     };
@@ -390,9 +433,9 @@ namespace YAML
         static bool decode(const Node& node, glm::ivec3& rhs)
         {
             if (!node.IsSequence() || node.size() != 3) { return false; }
-            rhs.x = node[0].as<float>();
-            rhs.y = node[1].as<float>();
-            rhs.z = node[2].as<float>();
+            rhs.x = node[0].as<int>();
+            rhs.y = node[1].as<int>();
+            rhs.z = node[2].as<int>();
             return true;
         }
     };
@@ -412,10 +455,10 @@ namespace YAML
         static bool decode(const Node& node, glm::ivec4& rhs)
         {
             if (!node.IsSequence() || node.size() != 4) { return false; }
-            rhs.x = node[0].as<float>();
-            rhs.y = node[1].as<float>();
-            rhs.z = node[2].as<float>();
-            rhs.w = node[3].as<float>();
+            rhs.x = node[0].as<int>();
+            rhs.y = node[1].as<int>();
+            rhs.z = node[2].as<int>();
+            rhs.w = node[3].as<int>();
             return true;
         }
     };

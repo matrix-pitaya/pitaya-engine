@@ -785,8 +785,7 @@ bool Pitaya::Asset::AssetHub::RegisterExternalFile(const std::filesystem::path& 
     return true;
 }
 
-bool Pitaya::Asset::AssetHub::RegisterGeneratedMaterial(
-    const std::filesystem::path& materialPath,
+bool Pitaya::Asset::AssetHub::RegisterGeneratedMaterial(const std::filesystem::path& materialPath,
     const std::filesystem::path& modelDirectory,
     const Pitaya::Import::MaterialImportSource& source,
     Pitaya::Core::GUID& out_guid)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include<filesystem>
+#include<cstdint>
 #include<string>
 #include<vector>
 
@@ -35,6 +36,7 @@ namespace Pitaya::Serialize
         virtual void Write(const std::string& key, glm::ivec4 value) = 0;
         virtual void Write(const std::string& key, bool value) = 0;
         virtual void Write(const std::string& key, uint32_t value) = 0;
+        virtual void Write(const std::string& key, uint64_t value) = 0;
 
     public:
         virtual std::string ToString() const = 0;

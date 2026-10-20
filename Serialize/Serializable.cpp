@@ -81,7 +81,7 @@ bool Pitaya::Serialize::Serializable::DeserializeFromFile(const std::filesystem:
         return false;
     }
 }
-bool Pitaya::Serialize::Serializable::SerializeToString(std::string& str,Pitaya::Serialize::API api) const
+bool Pitaya::Serialize::Serializable::SerializeToString(std::string& str, Pitaya::Serialize::API api) const
 {
     std::unique_ptr<SerializeContext> context = CreateSerializeContext(api);
     if (!context)
@@ -90,16 +90,24 @@ bool Pitaya::Serialize::Serializable::SerializeToString(std::string& str,Pitaya:
         return false;
     }
 
-    Serialize(*context);
-    str =  context->ToString();
-    return true;
+    try
+    {
+        Serialize(*context);
+        str = context->ToString();
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        Pitaya::Log::Error(std::string("serialize fail, error:") + e.what());
+        return false;
+    }
 }
 bool Pitaya::Serialize::Serializable::DeserializeFromString(const std::string& data, Pitaya::Serialize::API api)
 {
     std::unique_ptr<DeserializeContext> context = CreateDeserializeContext(api);
     if (!context)
     {
-        Pitaya::Log::Error("deseria context create fail, data:" + data);
+        Pitaya::Log::Error("deserialize context create fail");
         return false;
     }
 
@@ -111,7 +119,7 @@ bool Pitaya::Serialize::Serializable::DeserializeFromString(const std::string& d
     }
     catch (const std::exception& e)
     {
-        Pitaya::Log::Error("deserialize fail, load string error, data:" + data + ", error:" + e.what());
+        Pitaya::Log::Error(std::string("deserialize fail, load string error, error:") + e.what());
         return false;
     }
 }

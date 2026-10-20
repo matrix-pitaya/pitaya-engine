@@ -11,12 +11,17 @@
 
 namespace Pitaya::Asset
 {
+    class AssetHub;
+
     class AssetDatabase final : public Pitaya::Serialize::Serializable
     {
-    public:
+        friend class AssetHub;
+
+    private:
         AssetDatabase() = default;
         ~AssetDatabase() override = default;
 
+    public:
         AssetDatabase(const AssetDatabase&) = delete;
         AssetDatabase& operator=(const AssetDatabase&) = delete;
         AssetDatabase(AssetDatabase&&) = delete;

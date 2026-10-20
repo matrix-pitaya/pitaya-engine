@@ -9,15 +9,20 @@
 
 namespace Pitaya::Asset
 {
+    class AssetHub;
+
     // ImportPipeline 只负责把源文件转换为 CPU ImportResult。
     // 它不访问 AssetEntry、AssetDatabase 或 GPU；生命周期和调度由 AssetHub
     // 兼容 facade 以及后续 RuntimeAssetManager 负责。
     class ImportPipeline final
     {
-    public:
+        friend class AssetHub;
+
+    private:
         ImportPipeline() = default;
         ~ImportPipeline() = default;
 
+    public:
         ImportPipeline(const ImportPipeline&) = delete;
         ImportPipeline& operator=(const ImportPipeline&) = delete;
         ImportPipeline(ImportPipeline&&) = delete;

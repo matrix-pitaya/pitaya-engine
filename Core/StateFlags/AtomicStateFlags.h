@@ -77,6 +77,20 @@ namespace Pitaya::Core
             while (!atomicState.compare_exchange_weak(expectedState, (expectedState & ~static_cast<std::underlying_type_t<TEnum>>(clearMask)) | static_cast<std::underlying_type_t<TEnum>>(setMask),
                 std::memory_order_acq_rel, std::memory_order_relaxed));
         }
+        template <typename... Args>
+        inline void ModifyBits(TEnum setMask, Args&&... clearMasks) noexcept
+        {
+            static_assert(sizeof...(Args) > 0, "ModifyBits requires at least one clear mask!");
+            static_assert((std::is_same_v<std::decay_t<Args>, TEnum> && ...),
+                "All clear masks of ModifyBits must be of type TEnum!");
+
+            const std::underlying_type_t<TEnum> clearMask =
+                Pitaya::Core::CombineMask<TEnum>(std::forward<Args>(clearMasks)...);
+            std::underlying_type_t<TEnum> expectedState = atomicState.load(std::memory_order_relaxed);
+            while (!atomicState.compare_exchange_weak(expectedState,
+                (expectedState & ~clearMask) | static_cast<std::underlying_type_t<TEnum>>(setMask),
+                std::memory_order_acq_rel, std::memory_order_relaxed));
+        }
         inline void OverwriteBits(TEnum targetValue) noexcept
         {
             atomicState.store(static_cast<std::underlying_type_t<TEnum>>(targetValue), std::memory_order_release);
@@ -84,6 +98,17 @@ namespace Pitaya::Core
         inline bool HasBits(TEnum mask) const noexcept
         {
             return (atomicState.load(std::memory_order_acquire) & static_cast<std::underlying_type_t<TEnum>>(mask)) != 0;
+        }
+        template <typename... Args>
+        inline bool HasAnyBits(Args&&... args) const noexcept
+        {
+            static_assert(sizeof...(Args) > 0, "HasAnyBits requires at least one argument!");
+            static_assert((std::is_same_v<std::decay_t<Args>, TEnum> && ...),
+                "All arguments of HasAnyBits must be of type TEnum!");
+
+            const std::underlying_type_t<TEnum> mask =
+                Pitaya::Core::CombineMask<TEnum>(std::forward<Args>(args)...);
+            return (atomicState.load(std::memory_order_acquire) & mask) != 0;
         }
         inline bool HasAllBits(TEnum mask) const noexcept
         {
@@ -98,6 +123,13 @@ namespace Pitaya::Core
 
             std::underlying_type_t<TEnum> combinedMask = Pitaya::Core::CombineMask<TEnum>(std::forward<Args>(args)...);
             return (atomicState.load(std::memory_order_acquire) & combinedMask) == combinedMask;
+        }
+        inline bool HasAllBitsAndNone(TEnum requiredMask, TEnum forbiddenMask) const noexcept
+        {
+            const std::underlying_type_t<TEnum> state = atomicState.load(std::memory_order_acquire);
+            return (state & static_cast<std::underlying_type_t<TEnum>>(requiredMask))
+                == static_cast<std::underlying_type_t<TEnum>>(requiredMask)
+                && (state & static_cast<std::underlying_type_t<TEnum>>(forbiddenMask)) == 0;
         }
         inline TEnum GetEnum() const noexcept
         {

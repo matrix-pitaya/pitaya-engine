@@ -1,6 +1,8 @@
 #include<Asset/Database/AssetDatabase.h>
 
 #include<string>
+#include<stdexcept>
+#include<utility>
 
 namespace
 {
@@ -40,8 +42,8 @@ void Pitaya::Asset::AssetDatabase::Release()
     Save();
 }
 
-bool Pitaya::Asset::AssetDatabase::GetAssetPathByGUID(
-    Pitaya::Core::GUID guid, std::filesystem::path& outPath) const
+bool Pitaya::Asset::AssetDatabase::GetAssetPathByGUID(Pitaya::Core::GUID guid,
+    std::filesystem::path& outPath) const
 {
     const auto path = paths.Get(guid);
     if (!path.has_value()) { return false; }
@@ -50,8 +52,8 @@ bool Pitaya::Asset::AssetDatabase::GetAssetPathByGUID(
     return true;
 }
 
-bool Pitaya::Asset::AssetDatabase::GetAssetGUIDByPath(
-    const std::filesystem::path& path, Pitaya::Core::GUID& outGUID) const
+bool Pitaya::Asset::AssetDatabase::GetAssetGUIDByPath(const std::filesystem::path& path,
+    Pitaya::Core::GUID& outGUID) const
 {
     const auto guid = paths.Get(path);
     if (!guid.has_value()) { return false; }
@@ -60,8 +62,8 @@ bool Pitaya::Asset::AssetDatabase::GetAssetGUIDByPath(
     return true;
 }
 
-bool Pitaya::Asset::AssetDatabase::RegisterAssetPath(
-    Pitaya::Core::GUID guid, const std::filesystem::path& path)
+bool Pitaya::Asset::AssetDatabase::RegisterAssetPath(Pitaya::Core::GUID guid,
+    const std::filesystem::path& path)
 {
     if (!guid || path.empty()) { return false; }
 
@@ -75,8 +77,8 @@ bool Pitaya::Asset::AssetDatabase::RegisterAssetPath(
     return RegisterAsset(record);
 }
 
-bool Pitaya::Asset::AssetDatabase::RegisterAssetType(
-    Pitaya::Core::GUID guid, AssetTypeId type)
+bool Pitaya::Asset::AssetDatabase::RegisterAssetType(Pitaya::Core::GUID guid,
+    AssetTypeId type)
 {
     if (!guid || type == AssetTypeId::Invalid) { return false; }
 
@@ -140,15 +142,15 @@ bool Pitaya::Asset::AssetDatabase::Find(const AssetKey& key, AssetRecord& outRec
     return found;
 }
 
-bool Pitaya::Asset::AssetDatabase::FindByGUID(
-    Pitaya::Core::GUID guid, AssetRecord& outRecord) const
+bool Pitaya::Asset::AssetDatabase::FindByGUID(Pitaya::Core::GUID guid,
+    AssetRecord& outRecord) const
 {
     AssetKey key;
     return GetRecordKeyByGUID(guid, key) && Find(key, outRecord);
 }
 
-bool Pitaya::Asset::AssetDatabase::GetRecordKeyByGUID(
-    Pitaya::Core::GUID guid, AssetKey& outKey) const
+bool Pitaya::Asset::AssetDatabase::GetRecordKeyByGUID(Pitaya::Core::GUID guid,
+    AssetKey& outKey) const
 {
     bool found = false;
     recordKeys.FindAndReadKV(guid,
@@ -161,8 +163,7 @@ bool Pitaya::Asset::AssetDatabase::GetRecordKeyByGUID(
     return found;
 }
 
-void Pitaya::Asset::AssetDatabase::Serialize(
-    Pitaya::Serialize::SerializeContext& context) const
+void Pitaya::Asset::AssetDatabase::Serialize(Pitaya::Serialize::SerializeContext& context) const
 {
     context.Write("schema_version", schemaVersion);
 
@@ -183,8 +184,8 @@ void Pitaya::Asset::AssetDatabase::Serialize(
         entry.Write("origin", static_cast<uint32_t>(record.Origin));
         entry.Write("flags", static_cast<uint32_t>(record.Flags));
         entry.Write("importer_version", record.ImporterVersion);
-        entry.Write("source_hash", std::to_string(record.SourceHash));
-        entry.Write("import_settings_hash", std::to_string(record.ImportSettingsHash));
+        entry.Write("source_hash", record.SourceHash);
+        entry.Write("import_settings_hash", record.ImportSettingsHash);
         entry.Write("last_error", record.LastError);
 
         auto& dependencies = entry.GetSubContext("dependencies");
@@ -197,13 +198,15 @@ void Pitaya::Asset::AssetDatabase::Serialize(
     }
 }
 
-void Pitaya::Asset::AssetDatabase::Deserialize(
-    const Pitaya::Serialize::DeserializeContext& context)
+void Pitaya::Asset::AssetDatabase::Deserialize(const Pitaya::Serialize::DeserializeContext& context)
 {
-    paths.Clear();
-    records.Clear();
-    recordKeys.Clear();
+    uint32_t version = 1;
+    if (context.Read("schema_version", version) && version > schemaVersion)
+    {
+        throw std::runtime_error("asset catalog schema version is newer than this runtime");
+    }
 
+    std::vector<AssetRecord> loadedRecords;
     for (const auto& key : context.GetAllSubKeys())
     {
         Pitaya::Core::GUID guid(key);
@@ -241,17 +244,8 @@ void Pitaya::Asset::AssetDatabase::Deserialize(
         }
         entry.Read("importer_version", record.ImporterVersion);
 
-        std::string hash;
-        if (entry.Read("source_hash", hash) && !hash.empty())
-        {
-            try { record.SourceHash = std::stoull(hash); }
-            catch (...) { record.SourceHash = 0; }
-        }
-        if (entry.Read("import_settings_hash", hash) && !hash.empty())
-        {
-            try { record.ImportSettingsHash = std::stoull(hash); }
-            catch (...) { record.ImportSettingsHash = 0; }
-        }
+        entry.Read("source_hash", record.SourceHash);
+        entry.Read("import_settings_hash", record.ImportSettingsHash);
         entry.Read("last_error", record.LastError);
 
         if (entry.HasSubContext("dependencies"))
@@ -275,8 +269,14 @@ void Pitaya::Asset::AssetDatabase::Deserialize(
             }
         }
 
-        paths.Insert(guid, record.SourcePath);
-        records.InsertOrAssign(record.Key, record);
-        recordKeys.InsertOrAssign(guid, record.Key);
+        loadedRecords.push_back(std::move(record));
+    }
+
+    paths.Clear();
+    records.Clear();
+    recordKeys.Clear();
+    for (const AssetRecord& record : loadedRecords)
+    {
+        RegisterAsset(record);
     }
 }

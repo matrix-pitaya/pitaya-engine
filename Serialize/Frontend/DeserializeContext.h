@@ -1,6 +1,7 @@
 #pragma once
 
 #include<filesystem>
+#include<cstdint>
 #include<string>
 #include<vector>
 
@@ -36,5 +37,6 @@ namespace Pitaya::Serialize
         virtual bool Read(const std::string& key, glm::ivec4& out) const = 0;
         virtual bool Read(const std::string& key, bool& out) const = 0;
         virtual bool Read(const std::string& key, uint32_t& out) const = 0;
+        virtual bool Read(const std::string& key, uint64_t& out) const = 0;
     };
 }

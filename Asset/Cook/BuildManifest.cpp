@@ -1,6 +1,8 @@
 #include<Asset/Cook/BuildManifest.h>
 
 #include<string>
+#include<stdexcept>
+#include<utility>
 
 namespace
 {
@@ -55,8 +57,8 @@ bool Pitaya::Asset::BuildManifest::Register(const BuildManifestEntry& entry)
     return true;
 }
 
-bool Pitaya::Asset::BuildManifest::Find(
-    const AssetKey& key, BuildManifestEntry& outEntry) const
+bool Pitaya::Asset::BuildManifest::Find(const AssetKey& key,
+    BuildManifestEntry& outEntry) const
 {
     bool found = false;
     entries.FindAndReadKV(key,
@@ -69,15 +71,15 @@ bool Pitaya::Asset::BuildManifest::Find(
     return found;
 }
 
-bool Pitaya::Asset::BuildManifest::FindByGUID(
-    Pitaya::Core::GUID guid, BuildManifestEntry& outEntry) const
+bool Pitaya::Asset::BuildManifest::FindByGUID(Pitaya::Core::GUID guid,
+    BuildManifestEntry& outEntry) const
 {
     AssetKey key;
     return GetEntryKeyByGUID(guid, key) && Find(key, outEntry);
 }
 
-bool Pitaya::Asset::BuildManifest::GetArtifactPath(
-    const AssetKey& key, std::filesystem::path& outPath) const
+bool Pitaya::Asset::BuildManifest::GetArtifactPath(const AssetKey& key,
+    std::filesystem::path& outPath) const
 {
     BuildManifestEntry entry;
     if (!Find(key, entry)) { return false; }
@@ -85,8 +87,8 @@ bool Pitaya::Asset::BuildManifest::GetArtifactPath(
     return true;
 }
 
-bool Pitaya::Asset::BuildManifest::GetEntryKeyByGUID(
-    Pitaya::Core::GUID guid, AssetKey& outKey) const
+bool Pitaya::Asset::BuildManifest::GetEntryKeyByGUID(Pitaya::Core::GUID guid,
+    AssetKey& outKey) const
 {
     bool found = false;
     entryKeys.FindAndReadKV(guid,
@@ -99,8 +101,7 @@ bool Pitaya::Asset::BuildManifest::GetEntryKeyByGUID(
     return found;
 }
 
-void Pitaya::Asset::BuildManifest::Serialize(
-    Pitaya::Serialize::SerializeContext& context) const
+void Pitaya::Asset::BuildManifest::Serialize(Pitaya::Serialize::SerializeContext& context) const
 {
     context.Write("schema_version", schemaVersion);
 
@@ -111,7 +112,7 @@ void Pitaya::Asset::BuildManifest::Serialize(
 
         auto& serialized = context.GetSubContext(guid.ToString());
         serialized.Write("artifact_path", entry.ArtifactPath.generic_string());
-        serialized.Write("artifact_hash", std::to_string(entry.ArtifactHash));
+        serialized.Write("artifact_hash", entry.ArtifactHash);
         serialized.Write("type", static_cast<uint32_t>(entry.Key.Type));
         serialized.Write("chunk", entry.Chunk);
 
@@ -125,11 +126,15 @@ void Pitaya::Asset::BuildManifest::Serialize(
     }
 }
 
-void Pitaya::Asset::BuildManifest::Deserialize(
-    const Pitaya::Serialize::DeserializeContext& context)
+void Pitaya::Asset::BuildManifest::Deserialize(const Pitaya::Serialize::DeserializeContext& context)
 {
-    Clear();
+    uint32_t version = 1;
+    if (context.Read("schema_version", version) && version > schemaVersion)
+    {
+        throw std::runtime_error("build manifest schema version is newer than this runtime");
+    }
 
+    std::vector<BuildManifestEntry> loadedEntries;
     for (const auto& key : context.GetAllSubKeys())
     {
         Pitaya::Core::GUID guid(key);
@@ -147,12 +152,7 @@ void Pitaya::Asset::BuildManifest::Deserialize(
         entry.ArtifactPath = std::filesystem::path(artifactPath);
         serialized.Read("chunk", entry.Chunk);
 
-        std::string hash;
-        if (serialized.Read("artifact_hash", hash) && !hash.empty())
-        {
-            try { entry.ArtifactHash = std::stoull(hash); }
-            catch (...) { entry.ArtifactHash = 0; }
-        }
+        serialized.Read("artifact_hash", entry.ArtifactHash);
 
         if (serialized.HasSubContext("dependencies"))
         {
@@ -172,6 +172,12 @@ void Pitaya::Asset::BuildManifest::Deserialize(
             }
         }
 
+        loadedEntries.push_back(std::move(entry));
+    }
+
+    Clear();
+    for (const BuildManifestEntry& entry : loadedEntries)
+    {
         Register(entry);
     }
 }

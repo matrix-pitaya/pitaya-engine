@@ -271,3 +271,10 @@ Material 反序列化现在会恢复 Shader 参数布局和 `Textures` 子节点
 <workspace>/library/<Platform>/<Configuration>/
 ```
 
+## 9. C++ 实现规范
+
+- 由宿主模块拥有的服务类使用私有构造函数和析构函数，并将宿主类声明为 `friend`。例如 `AssetHub` 私有拥有 `ImportPipeline`、`AssetDatabase`、`VirtualFileSystem`、`RuntimeAssetManager` 和 `GpuAssetBridge`，外部不能自行创建这些服务；面向 Cooker 的独立对象才允许由工具层直接构造。
+- 函数定义将返回类型、限定函数名和第一个参数放在同一行；参数过长时只在逗号后换行，不把开括号单独留在函数名下一行。
+- 原子状态判断优先使用一次 `load` 得出结论。`AtomicStateFlags` 提供 `HasAnyBits`、`HasAllBitsAndNone`，状态迁移使用带多个清除掩码的 `ModifyBits`，避免连续的 `load/fetch` 造成中间状态和额外同步。
+- 序列化文件使用临时文件写入后替换目标文件；上下文复用时清理子上下文，schema 版本遇到更高版本直接拒绝，哈希等 64 位字段使用原生 `uint64_t` 读写。
+
