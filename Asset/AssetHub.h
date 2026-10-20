@@ -175,52 +175,12 @@ namespace Pitaya::Asset
                 return false;
             }
 
-            bool success = false;
-            bool hasGpuUnload = false;
-            Pitaya::Asset::AssetOperate unloadOperation;
-            GetAssetEntryMap<T>().FindOperateKV(guid,
-                [this, &success, &hasGpuUnload, &unloadOperation, guid](Pitaya::Core::GUID,
-                    typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
-                {
-                    if (!entry)
-                    {
-                        Pitaya::Log::Error("asset entry is empty GUID:" + guid.ToString());
-                        return;
-                    }
-                    if (entry->IsUnloadRequested())
-                    {
-                        success = true;
-                        return;
-                    }
-                    if (entry->RefCount.HasRef())
-                    {
-                        Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning,
-                            "can't unload asset while AssetRef is alive GUID:" + guid.ToString());
-                        return;
-                    }
-                    if (entry->IsLoading())
-                    {
-                        Pitaya::Log::Write(Pitaya::Log::LogLevel::Warning,
-                            "can't unload asset while it is loading GUID:" + guid.ToString());
-                        return;
-                    }
-
-                    // 在 map 写锁内完成检查和状态切换，避免 LoadAsset 在中间插入引用
-                    // 或开始另一轮 generation。句柄快照随后交给 RenderThread 销毁。
-                    entry->RequestUnload();
-                    hasGpuUnload = BuildGpuUnload<T>(entry, unloadOperation);
-                    ReleaseCpuDependencies<T>(entry);
-                    success = true;
-                },
-                [guid](Pitaya::Core::GUID)
-                {
-                    Pitaya::Log::Error("can't find asset entry GUID:" + guid.ToString());
-                });
+            auto unloadResult = runtimeAssetManager.RequestUnload<T>(guid);
             // 不能在 map 写锁内唤醒 Renderer：RenderThread 的顺序是 Renderer mutex
             // -> Asset map，卸载线程反向调用会形成锁顺序死锁。
-            if (hasGpuUnload) { gpuAssetBridge.EnqueueUnload(std::move(unloadOperation)); }
-            if (success) { Pitaya::Log::Info("asset unload requested GUID:" + guid.ToString()); }
-            return success;
+            if (unloadResult.HasGpuOperation) { gpuAssetBridge.EnqueueUnload(std::move(unloadResult.Operation)); }
+            if (unloadResult.Success) { Pitaya::Log::Info("asset unload requested GUID:" + guid.ToString()); }
+            return unloadResult.Success;
         }
 
     private:
@@ -343,116 +303,6 @@ namespace Pitaya::Asset
             operation.Data = std::forward<Result>(result);
             operation.Generation = generation;
             gpuAssetBridge.Enqueue(std::move(operation));
-        }
-
-        template<AssetType T>
-        inline bool BuildGpuUnload(typename Pitaya::Core::AssetRef<T>::AssetEntry* entry,
-            Pitaya::Asset::AssetOperate& operation)
-        {
-            if (!entry) { return false; }
-            std::lock_guard<std::mutex> lifecycleLock(entry->LifecycleMutex);
-            T* data = entry->Data.load(std::memory_order_acquire);
-            if (!data) { return false; }
-
-            bool hasGpuHandle = false;
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Texture>)
-            {
-                if (data->Type == Pitaya::GPU::TextureType::Texture2D && data->Texture2DHandle)
-                {
-                    operation.Data = Pitaya::Asset::Texture2DUnloadRequire{ data->Texture2DHandle };
-                    data->Texture2DHandle = Pitaya::Core::SlotMap<Pitaya::GPU::Texture2D>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-                else if (data->Type == Pitaya::GPU::TextureType::Texture2DArray && data->Texture2DArrayHandle)
-                {
-                    operation.Data = Pitaya::Asset::Texture2DArrayUnloadRequire{ data->Texture2DArrayHandle };
-                    data->Texture2DArrayHandle = Pitaya::Core::SlotMap<Pitaya::GPU::Texture2DArray>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-                else if (data->Type == Pitaya::GPU::TextureType::TextureCubemap && data->TextureCubemapHandle)
-                {
-                    operation.Data = Pitaya::Asset::TextureCubemapUnloadRequire{ data->TextureCubemapHandle };
-                    data->TextureCubemapHandle = Pitaya::Core::SlotMap<Pitaya::GPU::TextureCubemap>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-            }
-            else if constexpr (std::is_same_v<T, Pitaya::Asset::Shader>)
-            {
-                if (data->ShaderHandle)
-                {
-                    operation.Data = Pitaya::Asset::ShaderUnloadRequire{ data->ShaderHandle };
-                    data->ShaderHandle = Pitaya::Core::SlotMap<Pitaya::GPU::Shader>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-            }
-            else if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>)
-            {
-                if (data->VertexArrayHandle || data->VertexBufferHandle || data->IndexBufferHandle)
-                {
-                    operation.Data = Pitaya::Asset::MeshUnloadRequire{
-                        data->VertexArrayHandle, data->VertexBufferHandle, data->IndexBufferHandle };
-                    data->VertexArrayHandle = Pitaya::Core::SlotMap<Pitaya::GPU::VertexArray>::Handle::Invalid;
-                    data->VertexBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::VertexBuffer>::Handle::Invalid;
-                    data->IndexBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::IndexBuffer>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-            }
-            else if constexpr (std::is_same_v<T, Pitaya::Asset::RenderTarget>)
-            {
-                if (data->SceneFrameBufferHandle || data->PingPongFrameBufferHandles[0]
-                    || data->PingPongFrameBufferHandles[1] || data->FinalFrameBufferHandle)
-                {
-                    operation.Data = Pitaya::Asset::RenderTargetUnloadRequire{
-                        data->SceneFrameBufferHandle,
-                        { data->PingPongFrameBufferHandles[0], data->PingPongFrameBufferHandles[1] },
-                        data->FinalFrameBufferHandle };
-                    data->SceneFrameBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::FrameBuffer>::Handle::Invalid;
-                    data->PingPongFrameBufferHandles[0] = Pitaya::Core::SlotMap<Pitaya::GPU::FrameBuffer>::Handle::Invalid;
-                    data->PingPongFrameBufferHandles[1] = Pitaya::Core::SlotMap<Pitaya::GPU::FrameBuffer>::Handle::Invalid;
-                    data->FinalFrameBufferHandle = Pitaya::Core::SlotMap<Pitaya::GPU::FrameBuffer>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-            }
-            else if constexpr (std::is_same_v<T, Pitaya::Asset::SkyBox>)
-            {
-                if (data->EquirectHandle || data->EnvCubemapHandle || data->IrradianceHandle || data->PrefilteredHandle)
-                {
-                    operation.Data = Pitaya::Asset::SkyBoxUnloadRequire{
-                        data->EquirectHandle, data->EnvCubemapHandle,
-                        data->IrradianceHandle, data->PrefilteredHandle };
-                    data->EquirectHandle = Pitaya::Core::SlotMap<Pitaya::GPU::Texture2D>::Handle::Invalid;
-                    data->EnvCubemapHandle = Pitaya::Core::SlotMap<Pitaya::GPU::TextureCubemap>::Handle::Invalid;
-                    data->IrradianceHandle = Pitaya::Core::SlotMap<Pitaya::GPU::TextureCubemap>::Handle::Invalid;
-                    data->PrefilteredHandle = Pitaya::Core::SlotMap<Pitaya::GPU::TextureCubemap>::Handle::Invalid;
-                    hasGpuHandle = true;
-                }
-            }
-
-            return hasGpuHandle;
-        }
-
-        template<AssetType T>
-        inline void ReleaseCpuDependencies(typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
-        {
-            if (!entry) { return; }
-            std::lock_guard<std::mutex> lifecycleLock(entry->LifecycleMutex);
-            T* data = entry->Data.load(std::memory_order_acquire);
-            if (!data) { return; }
-
-            if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>)
-            {
-                data->Materials.clear();
-                data->SubMeshs.clear();
-                data->BoneInverseMatrices.clear();
-                data->BoneCount = 0;
-            }
-            else if constexpr (std::is_same_v<T, Pitaya::Asset::Material>)
-            {
-                data->Shader = nullptr;
-                data->Textures.clear();
-                data->FloatParams.clear();
-                data->VectorParams.clear();
-            }
         }
 
     public:
