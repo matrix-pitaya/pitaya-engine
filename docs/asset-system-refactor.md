@@ -169,7 +169,7 @@ Release 运行时只读取 Manifest 和 Cook Artifact，不扫描源文件，也
 
 ImportPipeline 的边界是：输入 GUID、虚拟/已解析路径和 `ImportContext`，输出 `ImportResult`；它不创建 `AssetEntry`、不持有 `AssetRef`、不写 AssetDatabase、不触碰 GPU。下一步的 RuntimeAssetManager 会接管 AssetHub 当前的 Entry map、异步加载和状态机，AssetHub 只保留兼容 facade。
 
-RuntimeAssetManager 第二阶段已开始：六组运行时 Entry map 已从 AssetHub 移入 `Asset/RuntimeAssetManager/RuntimeAssetManager.h`，AssetHub 通过兼容访问器驱动它们，GPU 回调和旧 `LoadAsset<T>` API 保持不变。Entry 创建、复用、`PrepareReload()`、generation 分配和卸载状态机已经由 `RuntimeAssetManager::Acquire<T>` / `RequestUnload<T>` 负责；AssetHub 只把 typed GPU 命令提交给 GpuAssetBridge，下一步继续迁移按帧回收逻辑。
+RuntimeAssetManager 第二阶段已开始：六组运行时 Entry map 已从 AssetHub 移入 `Asset/RuntimeAssetManager/RuntimeAssetManager.h`，AssetHub 通过兼容访问器驱动它们，GPU 回调和旧 `LoadAsset<T>` API 保持不变。Entry 创建、复用、`PrepareReload()`、generation 分配、卸载状态机和按帧回收已经由 `RuntimeAssetManager::Acquire<T>` / `RequestUnload<T>` / `CollectUnusedAssets()` 负责；AssetHub 只把 typed GPU 命令提交给 GpuAssetBridge。
 
 ### 阶段四：拆 GpuAssetBridge
 

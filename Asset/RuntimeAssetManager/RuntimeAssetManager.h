@@ -15,6 +15,7 @@
 #include<Asset/Common/Texture.h>
 
 #include<cstdint>
+#include<algorithm>
 #include<optional>
 
 namespace Pitaya::Asset
@@ -108,6 +109,17 @@ namespace Pitaya::Asset
             return result;
         }
 
+        inline void CollectUnusedAssets(size_t budget)
+        {
+            size_t remaining = budget;
+            remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::Texture>(remaining));
+            remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::Shader>(remaining));
+            remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::Mesh>(remaining));
+            remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::Material>(remaining));
+            remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::RenderTarget>(remaining));
+            remaining -= std::min(remaining, CollectUnusedEntries<Pitaya::Asset::SkyBox>(remaining));
+        }
+
         template<AssetType T>
         inline auto& GetAssetEntryMap() noexcept
         {
@@ -127,6 +139,35 @@ namespace Pitaya::Asset
         inline auto& SkyBoxes() noexcept { return skyboxes; }
 
     private:
+        template<AssetType T>
+        inline size_t CollectUnusedEntries(size_t budget)
+        {
+            if (budget == 0) { return 0; }
+            size_t collected = 0;
+            GetAssetEntryMap<T>().ForEachCheckErase(
+                [&collected, budget](Pitaya::Core::GUID,
+                    typename Pitaya::Core::AssetRef<T>::AssetEntry*& entry)
+                {
+                    if (collected >= budget) { return false; }
+                    if (!entry || !entry->IsUnloadRequested() || entry->RefCount.HasRef() || entry->IsLoading())
+                    {
+                        return false;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lifecycleLock(entry->LifecycleMutex);
+                        auto* data = entry->Data.exchange(nullptr, std::memory_order_acq_rel);
+                        Pitaya::Core::Delete(data);
+                        entry->State = Pitaya::Core::AssetState::Empty;
+                    }
+                    entry->MarkOrphaned();
+                    entry = nullptr;
+                    ++collected;
+                    return true;
+                });
+            return collected;
+        }
+
         template<AssetType T>
         inline bool BuildGpuUnload(typename Pitaya::Core::AssetRef<T>::AssetEntry* entry,
             Pitaya::Asset::AssetOperate& operation)
