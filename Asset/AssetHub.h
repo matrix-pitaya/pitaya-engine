@@ -206,6 +206,7 @@ namespace Pitaya::Asset
                     // 或开始另一轮 generation。句柄快照随后交给 RenderThread 销毁。
                     entry->RequestUnload();
                     hasGpuUnload = BuildGpuUnload<T>(entry, unloadOperation);
+                    ReleaseCpuDependencies<T>(entry);
                     success = true;
                 },
                 [guid](Pitaya::Core::GUID)
@@ -467,6 +468,30 @@ namespace Pitaya::Asset
             }
 
             return hasGpuHandle;
+        }
+
+        template<AssetType T>
+        inline void ReleaseCpuDependencies(typename Pitaya::Core::AssetRef<T>::AssetEntry* entry)
+        {
+            if (!entry) { return; }
+            std::lock_guard<std::mutex> lifecycleLock(entry->LifecycleMutex);
+            T* data = entry->Data.load(std::memory_order_acquire);
+            if (!data) { return; }
+
+            if constexpr (std::is_same_v<T, Pitaya::Asset::Mesh>)
+            {
+                data->Materials.clear();
+                data->SubMeshs.clear();
+                data->BoneInverseMatrices.clear();
+                data->BoneCount = 0;
+            }
+            else if constexpr (std::is_same_v<T, Pitaya::Asset::Material>)
+            {
+                data->Shader = nullptr;
+                data->Textures.clear();
+                data->FloatParams.clear();
+                data->VectorParams.clear();
+            }
         }
 
     public:
